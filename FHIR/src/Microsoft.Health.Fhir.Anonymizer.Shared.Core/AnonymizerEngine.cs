@@ -106,12 +106,35 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core
             var element = ParseJsonToTypedElement(json);
             var anonymizedElement = AnonymizeElement(element);
 
-            var serializationSettings = new FhirJsonSerializationSettings
+            // Check if FhirJsonSerializationSettings exists (R4/STU3) or use simpler approach (R5)
+            var settingsType = typeof(ITypedElement).Assembly.GetType("Hl7.Fhir.Serialization.FhirJsonSerializationSettings");
+            if (settingsType != null)
             {
-                Pretty = settings != null && settings.IsPrettyOutput
-            };
+                // R4/STU3: Use FhirJsonSerializationSettings
+                var serializationSettings = Activator.CreateInstance(settingsType);
+                var prettyProperty = settingsType.GetProperty("Pretty");
+                prettyProperty?.SetValue(serializationSettings, settings != null && settings.IsPrettyOutput);
+                
+                var toJsonMethod = typeof(ITypedElement).Assembly.GetType("Hl7.Fhir.Serialization.ElementNodeExtensions")
+                    ?.GetMethod("ToJson", new[] { typeof(ITypedElement), settingsType });
+                if (toJsonMethod != null)
+                {
+                    return (string)toJsonMethod.Invoke(null, new object[] { anonymizedElement, serializationSettings });
+                }
+            }
+            
+            // R5 fallback: Use parameterless ToJson() if available
+            var simpleToJsonMethod = anonymizedElement.GetType().GetMethod("ToJson", new Type[0])
+                ?? typeof(ITypedElement).Assembly.GetType("Hl7.Fhir.Serialization.ElementNodeExtensions")
+                    ?.GetMethod("ToJson", new[] { typeof(ITypedElement) });
+            
+            if (simpleToJsonMethod != null)
+            {
+                return (string)simpleToJsonMethod.Invoke(simpleToJsonMethod.IsStatic ? null : anonymizedElement, 
+                    simpleToJsonMethod.IsStatic ? new object[] { anonymizedElement } : new object[0]);
+            }
 
-            return anonymizedElement.ToJson(serializationSettings);
+            throw new InvalidOperationException("Unable to serialize anonymized element to JSON. ToJson method not found.");
         }
 
         private void ValidateInput(AnonymizerSettings settings, Resource resource)

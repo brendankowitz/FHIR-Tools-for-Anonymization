@@ -1,0 +1,24 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <TargetFrameworks>$(SupportedTargetFrameworks)</TargetFrameworks>
+    <IsPackable>true</IsPackable>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <copyright>Copyright © Microsoft Corporation. All rights reserved.</copyright>
+    <NoWarn>$(NoWarn);SDK0001</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Ensure.That" Version="10.1.0" />
+    <PackageReference Include="Hl7.Fhir.R5" Version="6.0.2" />
+    <PackageReference Include="Hl7.Fhir.Base" Version="6.0.2" />
+    <PackageReference Include="MathNet.Numerics" Version="5.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.6" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+  </ItemGroup>
+
+
+  <Import Project="..\Microsoft.Health.Fhir.Anonymizer.Shared.Core\Microsoft.Health.Fhir.Anonymizer.Shared.Core.projitems" Label="Shared" />
+
+</Project>
