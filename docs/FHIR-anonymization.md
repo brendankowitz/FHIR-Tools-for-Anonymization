@@ -196,14 +196,39 @@ The PowerShell script implicitly creates a resource group by appending 'resource
 If you want to cleanup resources, delete that resource group in addition to any other resources you may have explicitly created as part of this tutorial.
 
 ## Sample configuration file
-FHIR Tools for Anonymization comes with a sample configuration file to help meet the requirements of HIPAA Safe Harbor Method (2)(i). HIPAA Safe Harbor Method (2)(ii) talks about "actual knowledge", which is out of scope for this project.
+
+### Available Configuration Templates
+
+FHIR Tools for Anonymization provides multiple configuration templates for different regulatory frameworks:
+
+#### 1. HIPAA Safe Harbor Configuration (Default)
+
+The default configuration file helps meet the requirements of HIPAA Safe Harbor Method (2)(i). HIPAA Safe Harbor Method (2)(ii) talks about "actual knowledge", which is out of scope for this project.
 
 Out of the 18 identifier types mentioned in HIPAA Safe Harbor method (2)(i), this configuration file deals with the first 17 identifier types (A-Q). The 18th type, (R), is unspecific and hence not considered in this configuration file. 
 
-This configuration file is provided in a best-effort manner. We **strongly** recommend that you review the HIPAA guidelines as well as the implementation of this project before using it for you anonymization requirements. 
+This configuration file is provided in a best-effort manner. We **strongly** recommend that you review the HIPAA guidelines as well as the implementation of this project before using it for your anonymization requirements. 
 
+The HIPAA Safe Harbor configuration files can be accessed via:
+- [R4 HIPAA Safe Harbor](../FHIR/src/Microsoft.Health.Fhir.Anonymizer.R4.CommandLineTool/configuration-sample.json)
+- [STU3 HIPAA Safe Harbor](../FHIR/src/Microsoft.Health.Fhir.Anonymizer.Stu3.CommandLineTool/configuration-sample.json)
 
-The safe harbor configuration files can be accessed via [R4](../FHIR/src/Microsoft.Health.Fhir.Anonymizer.R4.CommandLineTool/configuration-sample.json) and [STU3](../FHIR/src/Microsoft.Health.Fhir.Anonymizer.Stu3.CommandLineTool/configuration-sample.json) links.
+#### 2. GDPR Article 89 Configuration
+
+For organizations operating in the European Union or processing EU residents' data for scientific research purposes, we provide a GDPR Article 89 compliant configuration. This configuration implements pseudonymization strategies and stricter data minimization principles required by EU data protection law.
+
+Key differences from HIPAA Safe Harbor:
+- **Pseudonymization-first approach**: Uses cryptographic hashing instead of complete redaction for identifiers
+- **Stricter geographic data handling**: Redacts all location data except country level
+- **Genetic and biometric data protection**: Explicit handling of Article 9 special category data
+- **Disabled partial data retention**: Stronger data minimization by default
+
+The GDPR Article 89 configuration files can be accessed via:
+- [R4 GDPR Article 89](../FHIR/src/Microsoft.Health.Fhir.Anonymizer.R4.CommandLineTool/configuration-gdpr-article89.json)
+- [STU3 GDPR Article 89](../FHIR/src/Microsoft.Health.Fhir.Anonymizer.Stu3.CommandLineTool/configuration-gdpr-article89.json)
+- [Detailed GDPR Article 89 Documentation](GDPR-Article89-Configuration.md)
+
+**Important**: Both configurations are provided in a best-effort manner. Consult with legal counsel and data protection experts before using them in production environments.
 
 ### Configuration file format
 

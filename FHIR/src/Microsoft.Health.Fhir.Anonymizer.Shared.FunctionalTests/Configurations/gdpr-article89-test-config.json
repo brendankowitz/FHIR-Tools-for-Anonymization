@@ -1,0 +1,28 @@
+{
+  "fhirVersion": "R4",
+  "processingErrors": "raise",
+  "fhirPathRules": [
+    {"path": "Resource.id", "method": "cryptoHash"},
+    {"path": "nodesByType('HumanName')", "method": "redact"},
+    {"path": "nodesByType('ContactPoint')", "method": "redact"},
+    {"path": "nodesByType('Address').line", "method": "redact"},
+    {"path": "nodesByType('Address').city", "method": "redact"},
+    {"path": "nodesByType('Address').postalCode", "method": "redact"},
+    {"path": "nodesByType('Address').country", "method": "keep"},
+    {"path": "nodesByType('Identifier').value", "method": "cryptoHash"},
+    {"path": "nodesByType('Reference').reference", "method": "cryptoHash"},
+    {"path": "nodesByType('date')", "method": "dateshift"},
+    {"path": "nodesByType('dateTime')", "method": "dateshift"},
+    {"path": "Patient.photo", "method": "redact"},
+    {"path": "MolecularSequence.observedSeq", "method": "redact"}
+  ],
+  "parameters": {
+    "dateShiftKey": "test-key-123",
+    "dateShiftScope": "resource",
+    "cryptoHashKey": "test-hash-key-456",
+    "encryptKey": "",
+    "enablePartialAgesForRedact": false,
+    "enablePartialDatesForRedact": false,
+    "enablePartialZipCodesForRedact": false
+  }
+}

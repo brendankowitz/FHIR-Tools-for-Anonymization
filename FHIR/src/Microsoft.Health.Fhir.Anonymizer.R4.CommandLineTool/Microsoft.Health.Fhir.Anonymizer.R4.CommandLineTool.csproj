@@ -19,6 +19,9 @@
     <None Update="configuration-sample.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Update="configuration-gdpr-article89.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
     <ItemGroup>
