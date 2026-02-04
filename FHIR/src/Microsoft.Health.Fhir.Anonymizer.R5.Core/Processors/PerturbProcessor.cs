@@ -11,8 +11,8 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.Processors
             FHIRAllTypes.Count.ToString(),
             FHIRAllTypes.Duration.ToString(),
             FHIRAllTypes.Distance.ToString(),
-            FHIRAllTypes.Money.ToString(),
-            // MoneyQuantity and SimpleQuantity don't exist in R5
+            FHIRAllTypes.Money.ToString(),  // Money type still exists in R5
+            // MoneyQuantity and SimpleQuantity types removed in R5 (were specialized Quantity types)
             FHIRAllTypes.Quantity.ToString()
         };
     }
