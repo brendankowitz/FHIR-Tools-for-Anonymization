@@ -1,0 +1,37 @@
+# AI Research Workflow
+# Weekly codebase health monitoring and reporting
+#
+# SECURITY: Pinned to specific commit SHA for immutability.
+# Update the SHA using Dependabot or manually after reviewing changes.
+#
+# REQUIRED SECRETS:
+# - COPILOT_GITHUB_TOKEN: GitHub PAT with "Copilot Requests: Read" permission
+
+name: AI Research Report
+on:
+  schedule:
+    # Run every Monday at 9am UTC
+    - cron: '0 9 * * 1'
+  workflow_dispatch: # Allow manual triggering
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+      security-events: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: AI Research
+        uses: brendankowitz/gh-workflow-agents/actions/research-agent@main
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          copilot-token: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+          model: claude-sonnet-4.5
+          output-type: issue
+          # Focus areas relevant to healthcare data anonymization
+          focus-areas: 'dependencies,security,technical-debt,industry-research'
