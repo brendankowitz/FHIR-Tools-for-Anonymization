@@ -107,7 +107,7 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core
             var anonymizedElement = AnonymizeElement(element);
 
             // Try to serialize back to JSON
-            // Approach 1: Try using ElementNode's ToJson (R4/STU3)
+            // Approach 1: Try reflection-based serialization for R4/STU3
             if (anonymizedElement is ElementNode elementNode)
             {
                 var result = TrySerializeElementNode(elementNode, settings);
@@ -135,10 +135,15 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core
             }
         }
 
+        /// <summary>
+        /// Attempts to serialize an ElementNode using reflection-based approach.
+        /// This works for R4/STU3 where FhirJsonSerializationSettings is available.
+        /// Returns null for R5 where this method is not supported.
+        /// </summary>
         private string TrySerializeElementNode(ElementNode elementNode, AnonymizerSettings settings)
         {
-            // Type names for reflection-based serialization compatibility across FHIR versions
-            // R4/STU3: Uses FhirJsonSerializationSettings for configuration
+            // Type names for reflection-based serialization compatibility
+            // These types exist in R4/STU3 but not in R5
             const string FhirJsonSerializationSettingsType = "Hl7.Fhir.Serialization.FhirJsonSerializationSettings";
             const string ElementNodeExtensionsType = "Hl7.Fhir.Serialization.ElementNodeExtensions";
             

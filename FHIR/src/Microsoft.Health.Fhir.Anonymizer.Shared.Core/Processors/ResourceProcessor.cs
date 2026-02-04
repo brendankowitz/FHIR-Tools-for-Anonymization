@@ -281,7 +281,8 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.Processors
         /// <summary>
         /// Safely converts an ITypedElement to ElementNode.
         /// In R5, some nodes (like PrimitiveNode) don't inherit from ElementNode.
-        /// This method handles the conversion gracefully.
+        /// This method handles the conversion gracefully by returning null for unconvertible types.
+        /// Note: When null is returned, the node is silently skipped from processing.
         /// </summary>
         /// <param name="typedElement">The ITypedElement to convert</param>
         /// <returns>ElementNode if conversion is possible, null otherwise</returns>
@@ -307,7 +308,7 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.Processors
 
             // If conversion failed, this is likely a PrimitiveNode in R5
             // We can't process these with the current processor interface
-            // Log and return null to skip processing
+            // Silently skip by returning null
             return null;
         }
     }
