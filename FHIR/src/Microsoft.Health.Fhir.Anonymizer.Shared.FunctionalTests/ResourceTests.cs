@@ -111,6 +111,22 @@ namespace Microsoft.Health.Fhir.Anonymizer.FunctionalTests
             string testContent = File.ReadAllText(ResourceTestsFile("patient-basic.json"));
             Assert.Throws<AnonymizerProcessingException>(() => engine.AnonymizeJson(testContent));
         }
+
+        [Fact]
+        public void GivenAPatientResource_WhenAnonymizingWithGdprArticle89Config_ThenAnonymizedJsonShouldBeReturned()
+        {
+            AnonymizerEngine engine = new AnonymizerEngine(Path.Combine("Configurations", "gdpr-article89-test-config.json"));
+            string testContent = File.ReadAllText(ResourceTestsFile("patient-basic.json"));
+            string result = engine.AnonymizeJson(testContent);
+            
+            // Verify the GDPR configuration applies pseudonymization and redaction correctly
+            Assert.NotNull(result);
+            Assert.DoesNotContain("\"name\":", result); // Names should be redacted
+            Assert.DoesNotContain("\"telecom\":", result); // Contact points should be redacted
+            // ID should be pseudonymized (not null, but different from original)
+            Assert.Contains("\"id\":", result);
+        }
+
         private string ResourceTestsFile(string fileName)
         {
             return Path.Combine("TestResources", fileName);

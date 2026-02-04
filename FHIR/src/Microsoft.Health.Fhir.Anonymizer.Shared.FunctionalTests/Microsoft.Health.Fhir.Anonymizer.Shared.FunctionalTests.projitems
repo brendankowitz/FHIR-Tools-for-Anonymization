@@ -163,6 +163,9 @@
     <None Include="$(MSBuildThisFileDirectory)Configurations\substitute-primitive.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Include="$(MSBuildThisFileDirectory)Configurations\gdpr-article89-test-config.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Include="$(MSBuildThisFileDirectory)TestResources\patient-substitute-complex-target.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
