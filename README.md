@@ -18,7 +18,7 @@ This project provides you the scripts and command line tools for your own use. I
 
 - **FHIR STU3** (September 2015): Fully supported and tested
 - **FHIR R4** (2019): Fully supported and tested  
-- **FHIR R5** (March 2023): ⚠️ **Experimental** - Core libraries build successfully, but runtime compatibility issues exist due to API changes in Hl7.Fhir.R5 SDK v6.0.2. Active development in progress.
+- **FHIR R5** (March 2023): ✅ **Functional** - Runtime anonymization works! Core libraries and CLI tool successfully process R5 resources. Some unit tests need updates for R5 API changes.
 
 The anonymization core engine uses a configuration file specifying different parameters as well as anonymization methods for different data-elements and datatypes. The repo contains a sample configuration file, which is based on the [HIPAA Safe Harbor](https://www.hhs.gov/hipaa/for-professionals/privacy/special-topics/de-identification/index.html#safeharborguidance) method. You can modify or create your own configuration file as needed.
 

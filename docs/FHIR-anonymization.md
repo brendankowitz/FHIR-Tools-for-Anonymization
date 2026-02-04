@@ -10,7 +10,7 @@ FHIR data anonymization is available in the following ways:
 * Support anonymization of FHIR R4, STU3, and R5 data in JSON as well as NDJSON format
   * **FHIR STU3** (September 2015): Fully supported
   * **FHIR R4** (2019): Fully supported
-  * **FHIR R5** (March 2023): ⚠️ Experimental support - core libraries build, but some runtime issues remain
+  * **FHIR R5** (March 2023): ✅ Functional - runtime anonymization works, some tests need updates
 * Configuration of the data elements that need to be anonymized 
 * Configuration of the [anonymization methods](#fhir-path-rules) for each data element
 * Ability to create a anonymization pipeline in Azure Data Factory
@@ -39,7 +39,7 @@ Once you have built the command line tool, you will find executable files for R4
 
 2. Microsoft.Health.Fhir.Anonymizer.Stu3.CommandLineTool.exe in the $SOURCE\FHIR\src\Microsoft.Health.Fhir.Anonymizer.Stu3.CommandLineTool\bin\Debug|Release\net8.0 folder.
 
-3. Microsoft.Health.Fhir.Anonymizer.R5.CommandLineTool.exe in the $SOURCE\FHIR\src\Microsoft.Health.Fhir.Anonymizer.R5.CommandLineTool\bin\Debug|Release\net8.0 folder. **(Experimental)**
+3. Microsoft.Health.Fhir.Anonymizer.R5.CommandLineTool.exe in the $SOURCE\FHIR\src\Microsoft.Health.Fhir.Anonymizer.R5.CommandLineTool\bin\Debug|Release\net8.0 folder. **(Functional - runtime anonymization works!)**
 
  You can use these executables to anonymize FHIR resource files in a folder.   
 ```
