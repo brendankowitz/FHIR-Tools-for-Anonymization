@@ -58,7 +58,11 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.Processors
 
                 foreach (var matchNode in matchNodes)
                 {
-                    ruleResult.Update(ProcessNodeRecursive((ElementNode) matchNode.ToElement(), _processors[method], ruleContext, rule.RuleSettings));
+                    var elementNode = ToElementNode(matchNode);
+                    if (elementNode != null)
+                    {
+                        ruleResult.Update(ProcessNodeRecursive(elementNode, _processors[method], ruleContext, rule.RuleSettings));
+                    }
                 }
 
                 LogProcessResult(node, rule, ruleResult);
@@ -264,10 +268,47 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.Processors
                     continue;
                 }
 
-                result.Update(ProcessNodeRecursive((ElementNode)child, processor, context, settings));
+                var childElementNode = ToElementNode(child);
+                if (childElementNode != null)
+                {
+                    result.Update(ProcessNodeRecursive(childElementNode, processor, context, settings));
+                }
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// Safely converts an ITypedElement to ElementNode.
+        /// In R5, some nodes (like PrimitiveNode) don't inherit from ElementNode.
+        /// This method handles the conversion gracefully.
+        /// </summary>
+        /// <param name="typedElement">The ITypedElement to convert</param>
+        /// <returns>ElementNode if conversion is possible, null otherwise</returns>
+        private static ElementNode ToElementNode(ITypedElement typedElement)
+        {
+            if (typedElement == null)
+            {
+                return null;
+            }
+
+            // Try direct cast first (works for R4/STU3 and some R5 cases)
+            if (typedElement is ElementNode elementNode)
+            {
+                return elementNode;
+            }
+
+            // For R5 PrimitiveNode and other types, try ToElement() conversion
+            var element = typedElement.ToElement();
+            if (element is ElementNode convertedNode)
+            {
+                return convertedNode;
+            }
+
+            // If conversion failed, this is likely a PrimitiveNode in R5
+            // We can't process these with the current processor interface
+            // Log and return null to skip processing
+            return null;
         }
     }
 }

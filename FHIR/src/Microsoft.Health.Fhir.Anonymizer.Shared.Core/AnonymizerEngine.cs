@@ -106,14 +106,47 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core
             var element = ParseJsonToTypedElement(json);
             var anonymizedElement = AnonymizeElement(element);
 
+            // Try to serialize back to JSON
+            // Approach 1: Try using ElementNode's ToJson (R4/STU3)
+            if (anonymizedElement is ElementNode elementNode)
+            {
+                var result = TrySerializeElementNode(elementNode, settings);
+                if (result != null)
+                {
+                    return result;
+                }
+            }
+            
+            // Approach 2: Convert to POCO and use FhirJsonSerializer (works for all versions including R5)
+            try
+            {
+                var resource = anonymizedElement.ToPoco<Resource>();
+                var serializer = new FhirJsonSerializer();
+                return serializer.SerializeToString(resource);
+            }
+            catch (Exception ex)
+            {
+                var fhirVersion = typeof(Resource).Assembly.GetName().Name;
+                throw new InvalidOperationException(
+                    $"Unable to serialize anonymized element to JSON. FHIR SDK: {fhirVersion}. " +
+                    $"Error: {ex.Message}. " +
+                    "Supported versions: R4 (Hl7.Fhir.R4), STU3 (Hl7.Fhir.STU3), R5 (Hl7.Fhir.R5 - experimental).",
+                    ex);
+            }
+        }
+
+        private string TrySerializeElementNode(ElementNode elementNode, AnonymizerSettings settings)
+        {
             // Type names for reflection-based serialization compatibility across FHIR versions
             // R4/STU3: Uses FhirJsonSerializationSettings for configuration
-            // R5: Uses simpler ToJson() method without settings
             const string FhirJsonSerializationSettingsType = "Hl7.Fhir.Serialization.FhirJsonSerializationSettings";
             const string ElementNodeExtensionsType = "Hl7.Fhir.Serialization.ElementNodeExtensions";
             
-            // Check if FhirJsonSerializationSettings exists (R4/STU3) or use simpler approach (R5)
-            var settingsType = typeof(ITypedElement).Assembly.GetType(FhirJsonSerializationSettingsType);
+            // Get the assembly where ITypedElement is defined
+            var fhirAssembly = typeof(ITypedElement).Assembly;
+            
+            // Check if FhirJsonSerializationSettings exists (R4/STU3)
+            var settingsType = fhirAssembly.GetType(FhirJsonSerializationSettingsType);
             if (settingsType != null)
             {
                 // R4/STU3: Use FhirJsonSerializationSettings
@@ -121,30 +154,15 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core
                 var prettyProperty = settingsType.GetProperty("Pretty");
                 prettyProperty?.SetValue(serializationSettings, settings != null && settings.IsPrettyOutput);
                 
-                var toJsonMethod = typeof(ITypedElement).Assembly.GetType(ElementNodeExtensionsType)
+                var toJsonMethod = fhirAssembly.GetType(ElementNodeExtensionsType)
                     ?.GetMethod("ToJson", new[] { typeof(ITypedElement), settingsType });
                 if (toJsonMethod != null)
                 {
-                    return (string)toJsonMethod.Invoke(null, new object[] { anonymizedElement, serializationSettings });
+                    return (string)toJsonMethod.Invoke(null, new object[] { elementNode, serializationSettings });
                 }
             }
             
-            // R5 fallback: Use parameterless ToJson() if available
-            var simpleToJsonMethod = anonymizedElement.GetType().GetMethod("ToJson", new Type[0])
-                ?? typeof(ITypedElement).Assembly.GetType(ElementNodeExtensionsType)
-                    ?.GetMethod("ToJson", new[] { typeof(ITypedElement) });
-            
-            if (simpleToJsonMethod != null)
-            {
-                return (string)simpleToJsonMethod.Invoke(simpleToJsonMethod.IsStatic ? null : anonymizedElement, 
-                    simpleToJsonMethod.IsStatic ? new object[] { anonymizedElement } : new object[0]);
-            }
-
-            var fhirVersion = typeof(Resource).Assembly.GetName().Name;
-            throw new InvalidOperationException(
-                $"Unable to serialize anonymized element to JSON. ToJson method not found for the current FHIR SDK ({fhirVersion}). " +
-                "This may indicate an unsupported FHIR version or SDK configuration issue. " +
-                "Supported versions: R4 (Hl7.Fhir.R4), STU3 (Hl7.Fhir.STU3), R5 (Hl7.Fhir.R5 - experimental).");
+            return null;
         }
 
         private void ValidateInput(AnonymizerSettings settings, Resource resource)
