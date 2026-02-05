@@ -1,0 +1,17 @@
+{
+  "resourceType": "Requirements",
+  "id": "example",
+  "url": "http://example.org/fhir/Requirements/example",
+  "status": "active",
+  "name": "PatientDataRequirements",
+  "title": "Patient Data Requirements",
+  "description": "Requirements for patient demographic data in the system",
+  "statement": [
+    {
+      "key": "req-1",
+      "label": "Patient Name Required",
+      "conformance": ["SHALL"],
+      "requirement": "The system SHALL capture patient's full legal name"
+    }
+  ]
+}

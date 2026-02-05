@@ -1,0 +1,20 @@
+{
+  "resourceType": "Subscription",
+  "id": "example",
+  "status": "active",
+  "topic": "http://example.org/topic/patient-admission",
+  "name": "Patient Admission Subscription",
+  "endpoint": "https://example.org/webhook",
+  "channelType": {
+    "system": "http://terminology.hl7.org/CodeSystem/subscription-channel-type",
+    "code": "rest-hook"
+  },
+  "content": "id-only",
+  "filterBy": [
+    {
+      "resourceType": "Encounter",
+      "filterParameter": "status",
+      "value": "in-progress"
+    }
+  ]
+}

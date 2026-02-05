@@ -45,6 +45,18 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Microsoft.Health.Fhir.Anony
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Microsoft.Health.Fhir.Anonymizer.Stu3.CommandLineTool", "src\Microsoft.Health.Fhir.Anonymizer.Stu3.CommandLineTool\Microsoft.Health.Fhir.Anonymizer.Stu3.CommandLineTool.csproj", "{DA3123C7-D0C4-4636-8A85-DF1F52A04794}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Microsoft.Health.Fhir.Anonymizer.R5.Core", "src\Microsoft.Health.Fhir.Anonymizer.R5.Core\Microsoft.Health.Fhir.Anonymizer.R5.Core.csproj", "{B8E12F90-1234-5678-9ABC-DEF012345678}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Microsoft.Health.Fhir.Anonymizer.R5.Core.UnitTests", "src\Microsoft.Health.Fhir.Anonymizer.R5.Core.UnitTests\Microsoft.Health.Fhir.Anonymizer.R5.Core.UnitTests.csproj", "{B8E12F91-1234-5678-9ABC-DEF012345678}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Microsoft.Health.Fhir.Anonymizer.R5.FunctionalTests", "src\Microsoft.Health.Fhir.Anonymizer.R5.FunctionalTests\Microsoft.Health.Fhir.Anonymizer.R5.FunctionalTests.csproj", "{B8E12F92-1234-5678-9ABC-DEF012345678}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Microsoft.Health.Fhir.Anonymizer.R5.AzureDataFactoryPipeline", "src\Microsoft.Health.Fhir.Anonymizer.R5.AzureDataFactoryPipeline\Microsoft.Health.Fhir.Anonymizer.R5.AzureDataFactoryPipeline.csproj", "{B8E12F93-1234-5678-9ABC-DEF012345678}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Microsoft.Health.Fhir.Anonymizer.R5.AzureDataFactoryPipeline.UnitTests", "src\Microsoft.Health.Fhir.Anonymizer.R5.AzureDataFactoryPipeline.UnitTests\Microsoft.Health.Fhir.Anonymizer.R5.AzureDataFactoryPipeline.UnitTests.csproj", "{B8E12F94-1234-5678-9ABC-DEF012345678}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Microsoft.Health.Fhir.Anonymizer.R5.CommandLineTool", "src\Microsoft.Health.Fhir.Anonymizer.R5.CommandLineTool\Microsoft.Health.Fhir.Anonymizer.R5.CommandLineTool.csproj", "{B8E12F95-1234-5678-9ABC-DEF012345678}"
+EndProject
 Global
 	GlobalSection(SharedMSBuildProjectFiles) = preSolution
 		src\Microsoft.Health.Fhir.Anonymizer.Shared.CommandLineTool\Microsoft.Health.Fhir.Anonymizer.Shared.CommandLineTool.projitems*{140255c7-6c80-4a3c-a248-ae8cdfdcf907}*SharedItemsImports = 13
@@ -61,6 +73,12 @@ Global
 		src\Microsoft.Health.Fhir.Anonymizer.Shared.AzureDataFactoryPipeline.UnitTests\Microsoft.Health.Fhir.Anonymizer.Shared.AzureDataFactoryPipeline.UnitTests.projitems*{8bad1364-4c47-443a-95e9-db624fdf78c8}*SharedItemsImports = 5
 		src\Microsoft.Health.Fhir.Anonymizer.Shared.Core.UnitTests\Microsoft.Health.Fhir.Anonymizer.Shared.Core.UnitTests.projitems*{a83e59e1-d6b2-4fa4-a08b-a38276c1a7d0}*SharedItemsImports = 5
 		src\Microsoft.Health.Fhir.Anonymizer.Shared.AzureDataFactoryPipeline\Microsoft.Health.Fhir.Anonymizer.Shared.AzureDataFactoryPipeline.projitems*{b1cc2f6c-f581-4495-8b38-adbfbb1a6c29}*SharedItemsImports = 13
+		src\Microsoft.Health.Fhir.Anonymizer.Shared.Core\Microsoft.Health.Fhir.Anonymizer.Shared.Core.projitems*{b8e12f90-1234-5678-9abc-def012345678}*SharedItemsImports = 5
+		src\Microsoft.Health.Fhir.Anonymizer.Shared.Core.UnitTests\Microsoft.Health.Fhir.Anonymizer.Shared.Core.UnitTests.projitems*{b8e12f91-1234-5678-9abc-def012345678}*SharedItemsImports = 5
+		src\Microsoft.Health.Fhir.Anonymizer.Shared.FunctionalTests\Microsoft.Health.Fhir.Anonymizer.Shared.FunctionalTests.projitems*{b8e12f92-1234-5678-9abc-def012345678}*SharedItemsImports = 5
+		src\Microsoft.Health.Fhir.Anonymizer.Shared.AzureDataFactoryPipeline\Microsoft.Health.Fhir.Anonymizer.Shared.AzureDataFactoryPipeline.projitems*{b8e12f93-1234-5678-9abc-def012345678}*SharedItemsImports = 5
+		src\Microsoft.Health.Fhir.Anonymizer.Shared.AzureDataFactoryPipeline.UnitTests\Microsoft.Health.Fhir.Anonymizer.Shared.AzureDataFactoryPipeline.UnitTests.projitems*{b8e12f94-1234-5678-9abc-def012345678}*SharedItemsImports = 5
+		src\Microsoft.Health.Fhir.Anonymizer.Shared.CommandLineTool\Microsoft.Health.Fhir.Anonymizer.Shared.CommandLineTool.projitems*{b8e12f95-1234-5678-9abc-def012345678}*SharedItemsImports = 5
 		src\Microsoft.Health.Fhir.Anonymizer.Shared.AzureDataFactoryPipeline\Microsoft.Health.Fhir.Anonymizer.Shared.AzureDataFactoryPipeline.projitems*{d75382e2-8e86-4bb5-a08f-5f2015db30e9}*SharedItemsImports = 5
 		src\Microsoft.Health.Fhir.Anonymizer.Shared.CommandLineTool\Microsoft.Health.Fhir.Anonymizer.Shared.CommandLineTool.projitems*{da3123c7-d0c4-4636-8a85-df1f52a04794}*SharedItemsImports = 5
 		src\Microsoft.Health.Fhir.Anonymizer.Shared.FunctionalTests\Microsoft.Health.Fhir.Anonymizer.Shared.FunctionalTests.projitems*{e3ae92aa-1c32-4533-b220-2c3db4b3bf66}*SharedItemsImports = 5
@@ -119,6 +137,30 @@ Global
 		{DA3123C7-D0C4-4636-8A85-DF1F52A04794}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{DA3123C7-D0C4-4636-8A85-DF1F52A04794}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{DA3123C7-D0C4-4636-8A85-DF1F52A04794}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B8E12F90-1234-5678-9ABC-DEF012345678}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B8E12F90-1234-5678-9ABC-DEF012345678}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B8E12F90-1234-5678-9ABC-DEF012345678}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B8E12F90-1234-5678-9ABC-DEF012345678}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B8E12F91-1234-5678-9ABC-DEF012345678}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B8E12F91-1234-5678-9ABC-DEF012345678}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B8E12F91-1234-5678-9ABC-DEF012345678}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B8E12F91-1234-5678-9ABC-DEF012345678}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B8E12F92-1234-5678-9ABC-DEF012345678}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B8E12F92-1234-5678-9ABC-DEF012345678}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B8E12F92-1234-5678-9ABC-DEF012345678}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B8E12F92-1234-5678-9ABC-DEF012345678}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B8E12F93-1234-5678-9ABC-DEF012345678}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B8E12F93-1234-5678-9ABC-DEF012345678}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B8E12F93-1234-5678-9ABC-DEF012345678}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B8E12F93-1234-5678-9ABC-DEF012345678}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B8E12F94-1234-5678-9ABC-DEF012345678}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B8E12F94-1234-5678-9ABC-DEF012345678}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B8E12F94-1234-5678-9ABC-DEF012345678}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B8E12F94-1234-5678-9ABC-DEF012345678}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B8E12F95-1234-5678-9ABC-DEF012345678}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B8E12F95-1234-5678-9ABC-DEF012345678}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B8E12F95-1234-5678-9ABC-DEF012345678}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B8E12F95-1234-5678-9ABC-DEF012345678}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -142,6 +184,12 @@ Global
 		{57035793-441B-4347-935C-3D19CE52C709} = {4273D1F5-D916-4291-8B60-7D74202D425E}
 		{8BAD1364-4C47-443A-95E9-DB624FDF78C8} = {4273D1F5-D916-4291-8B60-7D74202D425E}
 		{DA3123C7-D0C4-4636-8A85-DF1F52A04794} = {4273D1F5-D916-4291-8B60-7D74202D425E}
+		{B8E12F90-1234-5678-9ABC-DEF012345678} = {BE752207-CC25-4CB2-A2A5-65EB7B415E44}
+		{B8E12F91-1234-5678-9ABC-DEF012345678} = {BE752207-CC25-4CB2-A2A5-65EB7B415E44}
+		{B8E12F92-1234-5678-9ABC-DEF012345678} = {BE752207-CC25-4CB2-A2A5-65EB7B415E44}
+		{B8E12F93-1234-5678-9ABC-DEF012345678} = {4273D1F5-D916-4291-8B60-7D74202D425E}
+		{B8E12F94-1234-5678-9ABC-DEF012345678} = {4273D1F5-D916-4291-8B60-7D74202D425E}
+		{B8E12F95-1234-5678-9ABC-DEF012345678} = {4273D1F5-D916-4291-8B60-7D74202D425E}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {19A940B3-FA97-4729-AC91-EE68070BCFC1}

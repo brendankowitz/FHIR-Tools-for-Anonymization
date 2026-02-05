@@ -1,0 +1,11 @@
+{
+  "resourceType": "ActorDefinition",
+  "id": "example",
+  "url": "http://example.org/fhir/ActorDefinition/example",
+  "status": "active",
+  "name": "PatientRegistrationSystem",
+  "title": "Patient Registration System Actor",
+  "description": "An actor that represents a patient registration system in a healthcare organization",
+  "type": "system",
+  "capabilities": "http://example.org/fhir/CapabilityStatement/patient-registration"
+}

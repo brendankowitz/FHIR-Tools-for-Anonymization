@@ -1,0 +1,42 @@
+{
+  "resourceType": "ArtifactAssessment",
+  "id": "example",
+  "identifier": [
+    {
+      "system": "http://example.org/fhir/ArtifactAssessment",
+      "value": "assessment-001"
+    }
+  ],
+  "title": "Quality Assessment of Clinical Guideline",
+  "citeAsReference": {
+    "reference": "Library/example"
+  },
+  "date": "2024-01-15",
+  "copyright": "Copyright 2024 Example Organization",
+  "summary": "This assessment evaluates the quality and applicability of the clinical guideline for diabetes management",
+  "content": [
+    {
+      "informationType": "rating",
+      "type": {
+        "coding": [
+          {
+            "system": "http://terminology.hl7.org/CodeSystem/certainty-type",
+            "code": "Overall",
+            "display": "Overall quality"
+          }
+        ]
+      },
+      "classifier": [
+        {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/certainty-rating",
+              "code": "high",
+              "display": "High quality"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

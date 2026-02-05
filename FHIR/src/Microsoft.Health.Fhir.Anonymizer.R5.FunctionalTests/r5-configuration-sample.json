@@ -1,0 +1,37 @@
+{
+  "fhirVersion": "R5",
+  "processingErrors": "raise",
+  "fhirPathRules": [
+    {"path": "nodesByType('Extension')", "method": "redact"},
+    {"path": "Resource.id", "method": "cryptoHash"},
+    {"path": "nodesByType('Identifier')", "method": "cryptoHash"},
+    {"path": "nodesByType('HumanName')", "method": "redact"},
+    {"path": "nodesByType('ContactPoint')", "method": "redact"},
+    {"path": "nodesByType('Address')", "method": "redact"},
+    {"path": "nodesByType('Attachment').url", "method": "redact"},
+    {"path": "nodesByType('Attachment').data", "method": "redact"},
+    {"path": "nodesByType('Signature')", "method": "redact"},
+    {"path": "nodesByType('date')", "method": "dateShift", "span": 50},
+    {"path": "nodesByType('dateTime')", "method": "dateShift", "span": 50},
+    {"path": "nodesByType('instant')", "method": "dateShift", "span": 50},
+    {"path": "Subscription.name", "method": "redact"},
+    {"path": "Subscription.endpoint", "method": "redact"},
+    {"path": "SubscriptionTopic.title", "method": "redact"},
+    {"path": "SubscriptionTopic.description", "method": "redact"},
+    {"path": "ActorDefinition.name", "method": "redact"},
+    {"path": "ActorDefinition.title", "method": "redact"},
+    {"path": "ActorDefinition.description", "method": "redact"},
+    {"path": "Requirements.name", "method": "redact"},
+    {"path": "Requirements.title", "method": "redact"},
+    {"path": "ArtifactAssessment.title", "method": "redact"},
+    {"path": "ArtifactAssessment.summary", "method": "redact"}
+  ],
+  "parameters": {
+    "dateShiftKey": "123",
+    "cryptoHashKey": "123",
+    "encryptKey": "",
+    "enablePartialDatesForRedact": true,
+    "enablePartialZipCodesForRedact": true,
+    "enablePartialAgesForRedact": true
+  }
+}

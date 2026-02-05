@@ -1,0 +1,18 @@
+{
+  "resourceType": "SubscriptionTopic",
+  "id": "example",
+  "url": "http://example.org/FHIR/R5/SubscriptionTopic/example",
+  "status": "active",
+  "title": "Patient Encounter Monitoring Topic",
+  "description": "Example topic for monitoring patient encounter events",
+  "resourceTrigger": [
+    {
+      "resource": "Encounter",
+      "supportedInteraction": ["create", "update"],
+      "queryCriteria": {
+        "previous": "status:not=in-progress",
+        "current": "status=in-progress"
+      }
+    }
+  ]
+}
