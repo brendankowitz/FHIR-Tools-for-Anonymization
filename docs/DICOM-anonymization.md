@@ -9,7 +9,7 @@ The Digital Imaging and Communication in Medicine (DICOM) standard has been comm
 - Ability to run the tool on premise to anonymize a dataset locally.
 
 ### Build the solution
-Use the .Net Core SDK to build DICOM Anonymization Tool. If you don't have .Net Core installed, instructions and download links are available [here](https://dotnet.microsoft.com/download/dotnet/6.0).
+Use the .Net Core SDK to build DICOM Anonymization Tool. If you don't have .Net Core installed, instructions and download links are available [here](https://dotnet.microsoft.com/download/dotnet/10.0).
 
 ### Prepare DICOM Data
 You can prepare your own DICOM files as input, or use sample DICOM files in folder $SOURCE\DICOM\samples of the project.
@@ -24,7 +24,7 @@ You can prepare your own DICOM files as input, or use sample DICOM files in fold
 
 ## Anonymize DICOM data: using the command line tool
 
-Once you have built the command line tool, you will find executable file Microsoft.Health.Dicom.Anonymizer.CommandLineTool.exe in the $SOURCE\DICOM\src\Microsoft.Health.Dicom.Anonymizer.CommandLineTool\bin\Debug|Release\net8.0 folder.
+Once you have built the command line tool, you will find executable file Microsoft.Health.Dicom.Anonymizer.CommandLineTool.exe in the $SOURCE\DICOM\src\Microsoft.Health.Dicom.Anonymizer.CommandLineTool\bin\Debug|Release\net10.0 folder.
 
 You can use this executable file to anonymize DICOM file.
 
@@ -58,7 +58,7 @@ Example usage to anonymize DICOM files in a folder:
 The configuration is specified in JSON format and has three required high-level sections. The first section named _rules_, it specifies anonymization methods for DICOM tag. The second and third sections are _defaultSettings_ and _customSettings_ which specify default settings and custom settings for anonymization methods respectively.
 
 |Fields|Description|
-|----|----|
+|----|----|                                                                                      
 |rules|Anonymization rules for tags.|
 |defaultSettings|Default settings for anonymization functions. Default settings will be used if not specify settings in rules.|
 |customSettings|Custom settings for anonymization functions.|
@@ -187,7 +187,7 @@ Here is a sample rule using perturb method and using _perturbCustomerSetting_ as
 With this method, the input date or dateTime value will be shifted within a specific range. Dateshift function can only be used for date (DA) and date time (DT) types. In configuration, customers can define dateShiftRange, dateShiftKey and dateShiftScope. 
 
 |Parameters|Description|Valid Value|Required|default value|
-|----|----|--|--|--|
+|----|----|----|--|--|
 |dateShiftRange| A non-negative value representing the dateshift range. Date value will be shifted within [-dateShiftRange, dateShiftRange] days.|positive integer|False|50|
 |dateShiftKey|Key used to generate shift days.|string|False|A randomly generated string will be used as default key|
 |dateShiftScope|Scopes that share the same date shift key prefix and will be shift with the same days. |SeriesInstance, StudyInstance, SOPInstance. |False|SeriesInstance|
