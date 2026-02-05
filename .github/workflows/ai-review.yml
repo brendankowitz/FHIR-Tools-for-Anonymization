@@ -6,6 +6,9 @@
 #
 # REQUIRED SECRETS:
 # - COPILOT_GITHUB_TOKEN: GitHub PAT with "Copilot Requests: Read" permission
+# - GH_AGENCY_APP_ID: GitHub App ID (optional, for separate bot identity)
+# - GH_AGENCY_PRIVATE_KEY: GitHub App private key (optional)
+# - GH_AGENCY_INSTALLATION_ID: GitHub App installation ID (optional)
 
 name: AI Code Review
 on:
@@ -59,6 +62,9 @@ jobs:
         uses: brendankowitz/gh-workflow-agents/actions/review-agent@main
         env:
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+          GH_AGENCY_APP_ID: ${{ secrets.GH_AGENCY_APP_ID }}
+          GH_AGENCY_PRIVATE_KEY: ${{ secrets.GH_AGENCY_PRIVATE_KEY }}
+          GH_AGENCY_INSTALLATION_ID: ${{ secrets.GH_AGENCY_INSTALLATION_ID }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           copilot-token: ${{ secrets.COPILOT_GITHUB_TOKEN }}
