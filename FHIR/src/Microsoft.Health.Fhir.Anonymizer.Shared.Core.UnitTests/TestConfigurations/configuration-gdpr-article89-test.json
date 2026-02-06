@@ -1,0 +1,1 @@
+Created test configuration for GDPR Article 89 with proper key sizes (32 bytes for 256-bit AES) and generalize cases using dictionary format
