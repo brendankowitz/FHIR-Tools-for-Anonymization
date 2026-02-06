@@ -1,1 +1,36 @@
-Created functional test configuration for end-to-end testing of GDPR Article 89 anonymization
+{
+  "_comment": "WARNING: This configuration contains hardcoded test keys for FUNCTIONAL TESTING ONLY. These keys MUST NEVER be used in production environments. Always generate secure, random keys for production use.",
+  "fhirVersion": "R4",
+  "processingErrors": "raise",
+  "fhirPathRules": [
+    {"path": "nodesByType('Extension')", "method": "redact"},
+    {"path": "Resource.id", "method": "cryptoHash"},
+    {"path": "Patient.nodesByType('HumanName')", "method": "redact"},
+    {"path": "Patient.nodesByType('Address').country", "method": "keep"},
+    {"path": "Patient.nodesByType('Address').state", "method": "keep"},
+    {"path": "Patient.nodesByType('Address')", "method": "redact"},
+    {"path": "Patient.nodesByType('Identifier').value", "method": "cryptoHash"},
+    {"path": "Patient.nodesByType('ContactPoint')", "method": "redact"},
+    {"path": "Observation.value", "method": "keep"},
+    {"path": "Observation.referenceRange", "method": "keep"},
+    {"path": "nodesByType('Identifier').value", "method": "cryptoHash"},
+    {"path": "nodesByType('Reference').reference", "method": "cryptoHash"},
+    {"path": "nodesByType('Reference').display", "method": "redact"},
+    {"path": "nodesByType('Narrative')", "method": "redact"},
+    {"path": "nodesByType('date')", "method": "dateshift"},
+    {"path": "nodesByType('dateTime')", "method": "dateshift"},
+    {"path": "nodesByType('instant')", "method": "dateshift"},
+    {"path": "nodesByType('Age')", "method": "redact"},
+    {"path": "nodesByType('ContactPoint')", "method": "redact"}
+  ],
+  "parameters": {
+    "dateShiftKey": "functionalTestKey1234567890123",
+    "dateShiftScope": "resource",
+    "cryptoHashKey": "functionalHashKey123456789012",
+    "encryptKey": "functionalEncryptKey1234567890123",
+    "enablePartialAgesForRedact": false,
+    "enablePartialDatesForRedact": false,
+    "enablePartialZipCodesForRedact": false,
+    "restrictedZipCodeTabulationAreas": []
+  }
+}

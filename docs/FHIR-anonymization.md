@@ -1,1 +1,1 @@
-Updated main documentation to describe both HIPAA Safe Harbor and GDPR Article 89 configurations, explain key differences, and provide guidance on choosing the right configuration for different compliance frameworks
+Already contains placeholder text referencing GDPR Article 89 configuration option - to be expanded with actual comprehensive documentation in future iteration.

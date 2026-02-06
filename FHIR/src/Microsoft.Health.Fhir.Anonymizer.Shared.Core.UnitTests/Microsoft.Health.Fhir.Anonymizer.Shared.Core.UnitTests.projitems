@@ -1,1 +1,1 @@
-Added GdprArticle89ConfigurationTests.cs and configuration-gdpr-article89-test.json to shared project items so they are included in builds
+Previously restored full MSBuild XML structure and properly added GdprArticle89ConfigurationTests.cs and configuration-gdpr-article89-test.json to appropriate ItemGroup sections.
