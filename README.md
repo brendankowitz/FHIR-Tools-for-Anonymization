@@ -44,5 +44,6 @@ The following commands help you get started building and testing the anonymizati
 - Build DICOM only: `dotnet build DICOM\Dicom.Anonymizer.sln`
 - Build FHIR only: `dotnet build FHIR\Fhir.Anonymizer.sln`
 - Build specific framework: `dotnet build DICOM\Dicom.Anonymizer.sln -f net8.0`
+- Build with .NET 10: `dotnet build DICOM\Dicom.Anonymizer.sln -f net10.0`
 - Run tests: `dotnet test DICOM\Dicom.Anonymizer.sln && dotnet test FHIR\Fhir.Anonymizer.sln`
 - Create packages: `dotnet pack DICOM\Dicom.Anonymizer.sln -o packages && dotnet pack FHIR\Fhir.Anonymizer.sln -o packages`
