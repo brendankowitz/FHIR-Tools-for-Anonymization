@@ -24,7 +24,7 @@ You can prepare your own DICOM files as input, or use sample DICOM files in fold
 
 ## Anonymize DICOM data: using the command line tool
 
-Once you have built the command line tool, you will find executable file Microsoft.Health.Dicom.Anonymizer.CommandLineTool.exe in the $SOURCE\DICOM\src\Microsoft.Health.Dicom.Anonymizer.CommandLineTool\bin\Debug|Release\net8.0 folder.
+Once you have built the command line tool, you will find executable file Microsoft.Health.Dicom.Anonymizer.CommandLineTool.exe in the $SOURCE\DICOM\src\Microsoft.Health.Dicom.Anonymizer.CommandLineTool\bin\Debug|Release\net8.0|net9.0|net10.0 folder.
 
 You can use this executable file to anonymize DICOM file.
 
@@ -58,7 +58,7 @@ Example usage to anonymize DICOM files in a folder:
 The configuration is specified in JSON format and has three required high-level sections. The first section named _rules_, it specifies anonymization methods for DICOM tag. The second and third sections are _defaultSettings_ and _customSettings_ which specify default settings and custom settings for anonymization methods respectively.
 
 |Fields|Description|
-|----|----|
+|----|----||
 |rules|Anonymization rules for tags.|
 |defaultSettings|Default settings for anonymization functions. Default settings will be used if not specify settings in rules.|
 |customSettings|Custom settings for anonymization functions.|
