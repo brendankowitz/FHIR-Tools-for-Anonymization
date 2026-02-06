@@ -1,5 +1,7 @@
 {
-  "_comment": "WARNING: This configuration contains hardcoded test keys for FUNCTIONAL TESTING ONLY. These keys MUST NEVER be used in production environments. Always generate secure, random keys for production use.",
+  "_comment": "WARNING: This configuration contains hardcoded test keys for FUNCTIONAL TESTING ONLY. These keys MUST NEVER be used in production environments. Always generate secure, random keys for production use. See GDPR-Article89-configuration.md for key generation examples.",
+  "_schemaVersion": "1.0",
+  "_lastReviewed": "2026-02-06",
   "fhirVersion": "R4",
   "processingErrors": "raise",
   "fhirPathRules": [
@@ -24,10 +26,10 @@
     {"path": "nodesByType('ContactPoint')", "method": "redact"}
   ],
   "parameters": {
-    "dateShiftKey": "functionalTestKey1234567890123",
+    "dateShiftKey": "TEST-FUNCTIONAL-KEY-32CHARS!",
     "dateShiftScope": "resource",
-    "cryptoHashKey": "functionalHashKey123456789012",
-    "encryptKey": "functionalEncryptKey1234567890123",
+    "cryptoHashKey": "TEST-HASH-KEY-32-CHARACTERS!",
+    "encryptKey": "TEST-ENCRYPT-KEY-32CHARACTERS",
     "enablePartialAgesForRedact": false,
     "enablePartialDatesForRedact": false,
     "enablePartialZipCodesForRedact": false,

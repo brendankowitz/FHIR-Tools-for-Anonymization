@@ -1,4 +1,7 @@
 {
+  "_comment": "GDPR Article 89 Configuration - Pseudonymization for Research. WARNING: This configuration implements PSEUDONYMIZATION, not full anonymization. Keys must be generated and secured. See docs/GDPR-Article89-configuration.md for usage guidance.",
+  "_schemaVersion": "1.0",
+  "_lastReviewed": "2026-02-06",
   "fhirVersion": "R4",
   "processingErrors": "raise",
   "fhirPathRules": [
@@ -26,7 +29,7 @@
     {"path": "HealthcareService.availabilityExceptions", "method": "redact"},    
     {"path": "HealthcareService.extraDetails", "method": "redact"},   
     {"path": "HealthcareService.eligibility.comment", "method": "redact"},   
-    {"path": "HealthcareService.notAvaliable.description", "method": "redact"},
+    {"path": "HealthcareService.notAvailable.description", "method": "redact"},
     {"path": "Endpoint.name", "method": "redact"},
     {"path": "Endpoint.address", "method": "redact"},
     {"path": "Location.name", "method": "redact"},

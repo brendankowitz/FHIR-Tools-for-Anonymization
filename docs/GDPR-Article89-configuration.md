@@ -120,6 +120,143 @@ The GDPR Article 89 configuration balances two competing needs:
 
 **Rationale**: Reduces re-identification risk while preserving statistical properties
 
+## Cryptographic Key Generation
+
+### Security Requirements
+
+**CRITICAL**: The configuration file includes empty placeholder keys. You **MUST** generate and configure your own cryptographically secure keys before using this configuration in production.
+
+### Key Generation Examples
+
+#### Using PowerShell (Windows)
+
+```powershell
+# Generate 32-byte (256-bit) keys and encode as Base64
+$dateShiftKey = [Convert]::ToBase64String((New-Object byte[] 32 | ForEach-Object { Get-Random -Minimum 0 -Maximum 256 }))
+$cryptoHashKey = [Convert]::ToBase64String((New-Object byte[] 32 | ForEach-Object { Get-Random -Minimum 0 -Maximum 256 }))
+$encryptKey = [Convert]::ToBase64String((New-Object byte[] 32 | ForEach-Object { Get-Random -Minimum 0 -Maximum 256 }))
+
+Write-Host "dateShiftKey: $dateShiftKey"
+Write-Host "cryptoHashKey: $cryptoHashKey"
+Write-Host "encryptKey: $encryptKey"
+```
+
+#### Using OpenSSL (Linux/macOS)
+
+```bash
+# Generate 32-byte (256-bit) keys and encode as Base64
+dateShiftKey=$(openssl rand -base64 32)
+cryptoHashKey=$(openssl rand -base64 32)
+encryptKey=$(openssl rand -base64 32)
+
+echo "dateShiftKey: $dateShiftKey"
+echo "cryptoHashKey: $cryptoHashKey"
+echo "encryptKey: $encryptKey"
+```
+
+#### Using Python
+
+```python
+import secrets
+import base64
+
+# Generate 32-byte (256-bit) keys and encode as Base64
+date_shift_key = base64.b64encode(secrets.token_bytes(32)).decode('utf-8')
+crypto_hash_key = base64.b64encode(secrets.token_bytes(32)).decode('utf-8')
+encrypt_key = base64.b64encode(secrets.token_bytes(32)).decode('utf-8')
+
+print(f"dateShiftKey: {date_shift_key}")
+print(f"cryptoHashKey: {crypto_hash_key}")
+print(f"encryptKey: {encrypt_key}")
+```
+
+#### Using C# (.NET)
+
+```csharp
+using System;
+using System.Security.Cryptography;
+
+class KeyGenerator
+{
+    static void Main()
+    {
+        // Generate 32-byte (256-bit) keys and encode as Base64
+        string dateShiftKey = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+        string cryptoHashKey = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+        string encryptKey = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+        
+        Console.WriteLine($"dateShiftKey: {dateShiftKey}");
+        Console.WriteLine($"cryptoHashKey: {cryptoHashKey}");
+        Console.WriteLine($"encryptKey: {encryptKey}");
+    }
+}
+```
+
+### Key Management Best Practices
+
+1. **Generate Keys Securely**
+   - Use cryptographically secure random number generators
+   - Never use predictable values or weak random sources
+   - Generate at least 256 bits (32 bytes) of entropy
+
+2. **Store Keys Securely**
+   - **Never commit keys to version control**
+   - Use environment variables or secure key management systems
+   - Consider Azure Key Vault, AWS KMS, or HashiCorp Vault
+   - Implement access controls and audit logging
+
+3. **Separate Keys from Data**
+   - Store keys in a different system than anonymized data
+   - Use role-based access control (RBAC)
+   - Limit key access to authorized personnel only
+
+4. **Key Rotation**
+   - Implement a key rotation schedule (e.g., annually)
+   - Maintain key version history for data processed with old keys
+   - Document which datasets were processed with which key versions
+
+5. **Backup and Recovery**
+   - Securely backup keys in encrypted form
+   - Test key recovery procedures
+   - Document key recovery processes
+
+6. **Audit and Monitoring**
+   - Log all key access and usage
+   - Monitor for unauthorized access attempts
+   - Review audit logs regularly
+
+### Production Configuration Example
+
+```json
+{
+  "fhirVersion": "R4",
+  "processingErrors": "raise",
+  "fhirPathRules": [
+    // ... (your rules here)
+  ],
+  "parameters": {
+    "dateShiftKey": "YourGeneratedBase64KeyHere==",
+    "dateShiftScope": "resource",
+    "cryptoHashKey": "YourGeneratedBase64KeyHere==",
+    "encryptKey": "YourGeneratedBase64KeyHere==",
+    "enablePartialAgesForRedact": false,
+    "enablePartialDatesForRedact": false,
+    "enablePartialZipCodesForRedact": false,
+    "restrictedZipCodeTabulationAreas": []
+  }
+}
+```
+
+**Better approach - use environment variables:**
+
+```bash
+export FHIR_DATESHIFT_KEY="your-generated-key"
+export FHIR_CRYPTOHASH_KEY="your-generated-key"
+export FHIR_ENCRYPT_KEY="your-generated-key"
+
+# Then inject these into your configuration at runtime
+```
+
 ## Usage Examples
 
 ### Basic Anonymization for Research
@@ -319,6 +456,7 @@ For detailed mapping of configuration rules to GDPR Article 89 requirements, see
   - Consistent date shifting
   - Clinical value preservation
   - Comprehensive test coverage
+  - Added key generation examples and security guidance
 
 ---
 

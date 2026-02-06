@@ -1,1 +1,34 @@
-Changed fhirVersion from "R4" to "" (empty string) to make it version-agnostic and compatible with both R4 and STU3 test projects
+{
+  "_comment": "Test configuration for GDPR Article 89 unit tests",
+  "fhirVersion": "",
+  "processingErrors": "raise",
+  "fhirPathRules": [
+    {"path": "nodesByType('Extension')", "method": "redact"},
+    {"path": "Resource.id", "method": "cryptoHash"},
+    {"path": "Patient.nodesByType('HumanName')", "method": "redact"},
+    {"path": "Patient.nodesByType('Address').country", "method": "keep"},
+    {"path": "Patient.nodesByType('Address').state", "method": "keep"},
+    {"path": "Patient.nodesByType('Address')", "method": "redact"},
+    {"path": "Patient.nodesByType('Identifier').value", "method": "cryptoHash"},
+    {"path": "Observation.value", "method": "keep"},
+    {"path": "nodesByType('Identifier').value", "method": "cryptoHash"},
+    {"path": "nodesByType('Reference').reference", "method": "cryptoHash"},
+    {"path": "nodesByType('Reference').display", "method": "redact"},
+    {"path": "nodesByType('Narrative')", "method": "redact"},
+    {"path": "nodesByType('date')", "method": "dateshift"},
+    {"path": "nodesByType('dateTime')", "method": "dateshift"},
+    {"path": "nodesByType('instant')", "method": "dateshift"},
+    {"path": "nodesByType('HumanName')", "method": "redact"},
+    {"path": "nodesByType('ContactPoint')", "method": "redact"}
+  ],
+  "parameters": {
+    "dateShiftKey": "test-key-32-characters-long!!",
+    "dateShiftScope": "resource",
+    "cryptoHashKey": "test-hash-key-32-chars-long!!",
+    "encryptKey": "test-encrypt-key-32chars-long",
+    "enablePartialAgesForRedact": false,
+    "enablePartialDatesForRedact": false,
+    "enablePartialZipCodesForRedact": false,
+    "restrictedZipCodeTabulationAreas": []
+  }
+}
