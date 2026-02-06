@@ -54,7 +54,9 @@ jobs:
        github.event.review.state == 'changes_requested' &&
        contains(github.event.pull_request.labels.*.name, 'agent-coded')) ||
       (github.event_name == 'issue_comment' &&
-       startsWith(github.event.comment.body, '/agent'))
+       (startsWith(github.event.comment.body, '/agent') ||
+        contains(github.event.issue.labels.*.name, 'agent-coded')) &&
+       github.actor != 'github-actions[bot]')
 
     steps:
       - name: Checkout repository

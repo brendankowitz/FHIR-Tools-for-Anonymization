@@ -1,5 +1,5 @@
 # AI Research Workflow
-# Weekly codebase health monitoring and reporting with AI-powered insights
+# Weekly codebase health monitoring and issue-focused research
 #
 # REQUIRED SECRETS:
 # - COPILOT_GITHUB_TOKEN: GitHub PAT with "Copilot Requests: Read" permission
@@ -9,6 +9,24 @@ on:
   schedule:
     - cron: '0 9 * * 1'  # Every Monday 9am UTC
   workflow_dispatch:
+    inputs:
+      issue_number:
+        description: 'Issue number to research (for issue-focused mode)'
+        required: false
+        type: string
+      mode:
+        description: 'Research mode: scheduled or issue-focused'
+        required: false
+        default: 'scheduled'
+        type: choice
+        options:
+          - scheduled
+          - issue-focused
+
+# Prevent duplicate runs for the same issue
+concurrency:
+  group: ai-research-${{ github.event.inputs.issue_number || 'scheduled' }}
+  cancel-in-progress: true
 
 jobs:
   research:
@@ -16,6 +34,7 @@ jobs:
     permissions:
       issues: write
       contents: read
+      actions: write
       security-events: read
 
     steps:
@@ -34,6 +53,7 @@ jobs:
           copilot --version || echo "CLI installed"
 
       - name: AI Research
+        id: research
         uses: brendankowitz/gh-workflow-agents/actions/research-agent@main
         env:
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
@@ -45,3 +65,24 @@ jobs:
           focus-areas: 'dependencies,security,technical-debt,industry-research'
           create-actionable-issues: 'true'
           min-priority-for-issue: 'high'
+          issue-number: ${{ github.event.inputs.issue_number || '' }}
+          mode: ${{ github.event.inputs.mode || 'scheduled' }}
+
+      - name: Trigger Coding Agent
+        if: steps.research.outputs.recommended-action == 'assign-to-agent' && github.event.inputs.mode == 'issue-focused'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { data: repo } = await github.rest.repos.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+            const issueNumber = '${{ steps.research.outputs.issue-number }}' || '${{ github.event.inputs.issue_number }}';
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'ai-coding.yml',
+              ref: repo.default_branch,
+              inputs: { issue_number: String(issueNumber) }
+            });
