@@ -1,0 +1,36 @@
+{
+  "fhirVersion": "R5",
+  "processingErrors": "raise",
+  "fhirPathRules": [
+    {"path": "nodesByType('Extension')", "method": "redact"},
+
+    {"path": "Organization.identifier", "method": "keep"},
+    {"path": "Organization.telecom", "method": "keep"},
+    {"path": "Organization.address", "method": "keep"},
+
+    {"path": "Resource.id", "method": "cryptoHash"},
+    {"path": "Bundle.entry.fullUrl", "method": "redact"},
+    {"path": "Bundle.entry.request.url", "method": "redact"},
+    {"path": "Bundle.entry.response.location", "method":"redact"},
+
+    {"path": "nodesByType('Narrative')", "method": "redact"},
+    {"path": "nodesByType('base64Binary')", "method": "redact"},
+    {"path": "nodesByType('date')", "method": "dateshift"},
+    {"path": "nodesByType('dateTime')", "method": "dateshift"},
+    {"path": "nodesByType('instant')", "method": "dateshift"},
+    {"path": "nodesByType('Address')", "method": "redact"},
+    {"path": "nodesByType('Age')", "method": "redact"},
+    {"path": "nodesByType('Annotation')", "method": "redact"},
+    {"path": "nodesByType('HumanName')", "method": "redact"},
+    {"path": "nodesByType('ContactPoint')", "method": "redact"}
+  ],
+  "parameters": {
+    "dateShiftKey": "",
+    "dateShiftScope": "resource",
+    "cryptoHashKey": "",
+    "encryptKey": "",
+    "enablePartialAgesForRedact": true,
+    "enablePartialDatesForRedact": true,
+    "enablePartialZipCodesForRedact": true
+  }
+}

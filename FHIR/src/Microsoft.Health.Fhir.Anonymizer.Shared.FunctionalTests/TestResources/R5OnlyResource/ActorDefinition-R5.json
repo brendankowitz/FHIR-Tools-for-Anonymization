@@ -1,0 +1,10 @@
+{
+  "resourceType": "ActorDefinition",
+  "id": "actor-definition-example",
+  "url": "http://example.org/fhir/ActorDefinition/actor-example",
+  "status": "active",
+  "type": "person",
+  "title": "Sample Actor Definition",
+  "description": "An example ActorDefinition resource for R5 testing",
+  "capabilities": "http://example.org/fhir/CapabilityStatement/example"
+}

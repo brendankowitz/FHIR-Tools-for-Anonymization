@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>$(SupportedTargetFrameworks)</TargetFrameworks>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+	<PackageReference Include="Hl7.Fhir.R5" Version="5.12.0" />
+	<PackageReference Include="Hl7.Fhir.Base" Version="5.12.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.1">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="coverlet.collector" Version="6.0.4">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Microsoft.Health.Fhir.Anonymizer.R5.Core\Microsoft.Health.Fhir.Anonymizer.R5.Core.csproj" />
+  </ItemGroup>
+
+  <Import Project="..\Microsoft.Health.Fhir.Anonymizer.Shared.Core.UnitTests\Microsoft.Health.Fhir.Anonymizer.Shared.Core.UnitTests.projitems" Label="Shared" />
+
+  <!-- Exclude tests that are incompatible with R5 due to API changes -->
+  <ItemGroup>
+    <!-- R5: Organization.Address property changed - no longer a list, moved to Contact[].Address -->
+    <Compile Remove="..\Microsoft.Health.Fhir.Anonymizer.Shared.Core.UnitTests\Extensions\FhirPathSymbolExtensionsTests.cs" />
+    <Compile Remove="..\Microsoft.Health.Fhir.Anonymizer.Shared.Core.UnitTests\Visitors\AnonymizationVisitorTests.cs" />
+  </ItemGroup>
+
+</Project>

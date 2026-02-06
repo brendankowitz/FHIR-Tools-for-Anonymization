@@ -1,0 +1,21 @@
+{
+  "resourceType": "Subscription",
+  "id": "subscription-r5-example",
+  "status": "active",
+  "topic": "http://example.org/fhir/SubscriptionTopic/example-topic",
+  "reason": "Test subscription for R5 anonymization testing",
+  "filterBy": [
+    {
+      "resourceType": "Patient",
+      "filterParameter": "name",
+      "value": "TestPatient"
+    }
+  ],
+  "channelType": {
+    "system": "http://terminology.hl7.org/CodeSystem/subscription-channel-type",
+    "code": "rest-hook"
+  },
+  "endpoint": "https://example.org/webhook",
+  "contentType": "application/fhir+json",
+  "content": "full-resource"
+}

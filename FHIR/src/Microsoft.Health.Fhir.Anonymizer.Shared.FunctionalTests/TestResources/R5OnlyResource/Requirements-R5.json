@@ -1,0 +1,15 @@
+{
+  "resourceType": "Requirements",
+  "id": "requirements-example",
+  "url": "http://example.org/fhir/Requirements/req-example",
+  "status": "active",
+  "title": "Sample Requirements Resource",
+  "description": "An example Requirements resource for R5 testing",
+  "statement": [
+    {
+      "key": "REQ-001",
+      "label": "Sample Requirement",
+      "requirement": "The system shall anonymize patient data"
+    }
+  ]
+}

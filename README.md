@@ -14,6 +14,13 @@ This project provides you the scripts and command line tools for your own use. I
 * For information on FHIR data anonymization, please check out the [FHIR anonymization documentation](docs/FHIR-anonymization.md).
 * For information on DICOM data anonymization, please check out the [DICOM anonymization documentation](docs/DICOM-anonymization.md).
 
+### FHIR Version Support
+
+The FHIR anonymization tool supports multiple FHIR versions:
+- **STU3** (FHIR 3.0.2)
+- **R4** (FHIR 4.0.1)
+- **R5** (FHIR 5.0.0) - Latest version support
+
 The anonymization core engine uses a configuration file specifying different parameters as well as anonymization methods for different data-elements and datatypes. The repo contains a sample configuration file, which is based on the [HIPAA Safe Harbor](https://www.hhs.gov/hipaa/for-professionals/privacy/special-topics/de-identification/index.html#safeharborguidance) method. You can modify or create your own configuration file as needed.
 
 This open source project is fully backed by the Microsoft Healthcare team, but we know that this project will only get better with your feedback and contributions. We are leading the development of this code base, and test builds and deployments daily.
