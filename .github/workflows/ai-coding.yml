@@ -2,7 +2,7 @@
 # Autonomously implements code changes from issues
 #
 # REQUIRED SECRETS:
-# - COPILOT_GITHUB_TOKEN: GitHub PAT with repo write + Copilot access
+# - COPILOT_GITHUB_TOKEN: GitHub PAT with Copilot access
 #
 # SLASH COMMANDS (post as a comment on an issue or PR):
 #   /agent fix [instructions]       - Fix review issues on a PR
@@ -63,7 +63,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.COPILOT_GITHUB_TOKEN }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
