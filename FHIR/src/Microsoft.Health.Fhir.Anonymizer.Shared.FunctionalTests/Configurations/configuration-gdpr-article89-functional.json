@@ -1,0 +1,38 @@
+{
+  "_comment": "WARNING: This configuration contains hardcoded test keys for FUNCTIONAL TESTING ONLY. These keys MUST NEVER be used in production environments. Always generate secure, random keys for production use. See GDPR-Article89-configuration.md for key generation examples.",
+  "_schemaVersion": "1.0",
+  "_lastReviewed": "2026-02-06",
+  "fhirVersion": "R4",
+  "processingErrors": "raise",
+  "fhirPathRules": [
+    {"path": "nodesByType('Extension')", "method": "redact"},
+    {"path": "Resource.id", "method": "cryptoHash"},
+    {"path": "Patient.nodesByType('HumanName')", "method": "redact"},
+    {"path": "Patient.nodesByType('Address').country", "method": "keep"},
+    {"path": "Patient.nodesByType('Address').state", "method": "keep"},
+    {"path": "Patient.nodesByType('Address')", "method": "redact"},
+    {"path": "Patient.nodesByType('Identifier').value", "method": "cryptoHash"},
+    {"path": "Patient.nodesByType('ContactPoint')", "method": "redact"},
+    {"path": "Observation.value", "method": "keep"},
+    {"path": "Observation.referenceRange", "method": "keep"},
+    {"path": "nodesByType('Identifier').value", "method": "cryptoHash"},
+    {"path": "nodesByType('Reference').reference", "method": "cryptoHash"},
+    {"path": "nodesByType('Reference').display", "method": "redact"},
+    {"path": "nodesByType('Narrative')", "method": "redact"},
+    {"path": "nodesByType('date')", "method": "dateshift"},
+    {"path": "nodesByType('dateTime')", "method": "dateshift"},
+    {"path": "nodesByType('instant')", "method": "dateshift"},
+    {"path": "nodesByType('Age')", "method": "redact"},
+    {"path": "nodesByType('ContactPoint')", "method": "redact"}
+  ],
+  "parameters": {
+    "dateShiftKey": "TEST-FUNCTIONAL-KEY-32CHARS!",
+    "dateShiftScope": "resource",
+    "cryptoHashKey": "TEST-HASH-KEY-32-CHARACTERS!",
+    "encryptKey": "TEST-ENCRYPT-KEY-32CHARACTERS",
+    "enablePartialAgesForRedact": false,
+    "enablePartialDatesForRedact": false,
+    "enablePartialZipCodesForRedact": false,
+    "restrictedZipCodeTabulationAreas": []
+  }
+}
