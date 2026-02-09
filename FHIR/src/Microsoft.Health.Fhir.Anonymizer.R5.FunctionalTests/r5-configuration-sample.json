@@ -1,0 +1,22 @@
+{
+  "fhirVersion": "R5",
+  "processingErrors": "raise",
+  "fhirPathRules": [
+    {"path": "nodesByType('Extension')", "method": "redact"},
+    {"path": "Resource.id", "method": "cryptoHash"},
+    {"path": "nodesByType('HumanName')", "method": "redact"},
+    {"path": "nodesByType('ContactPoint')", "method": "redact"},
+    {"path": "nodesByType('Address')", "method": "redact"},
+    {"path": "nodesByType('Identifier').value", "method": "redact"},
+    {"path": "nodesByType('Reference').reference", "method": "cryptoHash"},
+    {"path": "nodesByType('date')", "method": "dateshift"},
+    {"path": "nodesByType('dateTime')", "method": "dateshift"},
+    {"path": "nodesByType('instant')", "method": "dateshift"}
+  ],
+  "parameters": {
+    "dateShiftKey": "",
+    "dateShiftScope": "resource",
+    "cryptoHashKey": "",
+    "encryptKey": ""
+  }
+}
