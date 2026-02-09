@@ -1,0 +1,1 @@
+Added prominent CRITICAL SECURITY WARNINGS section at top covering: epsilon budget composition and accumulation, budget exhaustion scenarios and mitigation strategies, budget context isolation requirements (security requirement), common budget exhaustion mistakes with code examples, audit logging capabilities, and fail-secure principles

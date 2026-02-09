@@ -1,0 +1,121 @@
+{
+  "fhirVersion": "R4",
+  "processingErrors": "raise",
+  "fhirPathRules": [
+    {
+      "path": "Patient.birthDate",
+      "method": "kAnonymity",
+      "quasiIdentifiers": ["Patient.birthDate", "Patient.address.postalCode", "Patient.gender"],
+      "kValue": 5,
+      "generalizationStrategy": "ageRange",
+      "ageRangeYears": 5
+    },
+    {
+      "path": "Patient.address.postalCode",
+      "method": "kAnonymity",
+      "quasiIdentifiers": ["Patient.birthDate", "Patient.address.postalCode", "Patient.gender"],
+      "kValue": 5,
+      "generalizationStrategy": "hierarchy",
+      "hierarchyLevel": 3
+    },
+    {
+      "path": "Patient.gender",
+      "method": "kAnonymity",
+      "quasiIdentifiers": ["Patient.birthDate", "Patient.address.postalCode", "Patient.gender"],
+      "kValue": 5,
+      "generalizationStrategy": "retain"
+    },
+    {
+      "path": "Patient.identifier",
+      "method": "cryptoHash",
+      "hashFunction": "SHA256",
+      "hmacKey": "$HMAC_KEY"
+    },
+    {
+      "path": "Patient.name",
+      "method": "redact"
+    },
+    {
+      "path": "Patient.telecom",
+      "method": "redact"
+    },
+    {
+      "path": "Patient.address.line",
+      "method": "redact"
+    },
+    {
+      "path": "Patient.address.city",
+      "method": "generalize",
+      "cases": [
+        {
+          "expression": "$this",
+          "method": "redact"
+        }
+      ]
+    }
+  ],
+  "_comments": {
+    "SECURITY_CRITICAL": [
+      "╔═══════════════════════════════════════════════════════════════════════════════════╗",
+      "║ CRITICAL SECURITY WARNING - NEVER USE PLACEHOLDER VALUES IN PRODUCTION           ║",
+      "╠═══════════════════════════════════════════════════════════════════════════════════╣",
+      "║ The value '$HMAC_KEY' in this configuration is a PLACEHOLDER and will be         ║",
+      "║ REJECTED by runtime validation. You MUST replace it with a cryptographically     ║",
+      "║ secure random key before using this configuration.                               ║",
+      "║                                                                                   ║",
+      "║ Generate a secure key using:                                                     ║",
+      "║   openssl rand -base64 32                                                        ║",
+      "║                                                                                   ║",
+      "║ Store the key securely using:                                                    ║",
+      "║   - Environment variables (recommended for development)                          ║",
+      "║   - Azure Key Vault, AWS Secrets Manager, HashiCorp Vault (production)          ║",
+      "║   - Hardware Security Modules (HSM) for highest security                        ║",
+      "║                                                                                   ║",
+      "║ NEVER commit production keys to source control or configuration files!          ║",
+      "╚═══════════════════════════════════════════════════════════════════════════════════╝"
+    ],
+    "K_ANONYMITY_EXPLANATION": {
+      "definition": "K-anonymity ensures each combination of quasi-identifiers appears in at least k records",
+      "quasi_identifiers": "Attributes that together could identify individuals (e.g., birthDate + postalCode + gender)",
+      "k_value": "Minimum group size. Higher k = stronger privacy but may require more generalization",
+      "recommendation": "k >= 5 is standard. Use k >= 10 for high-risk data. k >= 2 is absolute minimum."
+    },
+    "IMPORTANT_LIMITATIONS": [
+      "This processor applies generalization to individual nodes but does NOT guarantee k-anonymity",
+      "K-anonymity requires batch validation across the entire dataset after processing",
+      "Use KAnonymityValidator on the complete dataset to verify the k-anonymity property holds",
+      "High suppression rates (>30%) indicate significant data utility loss - review quasi-identifiers"
+    ],
+    "GENERALIZATION_STRATEGIES": {
+      "ageRange": "Converts ages to ranges (0-9, 10-19, etc.). Configure range size with 'ageRangeYears'",
+      "hierarchy": "Hierarchical generalization (e.g., ZIP 12345 -> 123**). Set 'hierarchyLevel' for granularity",
+      "retain": "Keep value unchanged. Use for low-cardinality attributes like gender",
+      "suppression": "Remove value entirely if equivalence class is too small"
+    },
+    "REGULATORY_COMPLIANCE": {
+      "HIPAA": "K-anonymity alone does not satisfy HIPAA Safe Harbor. Combine with redaction of direct identifiers.",
+      "GDPR": "K-anonymity is a recognized pseudonymization technique under GDPR Article 4(5)",
+      "WARNING": "K-anonymity is vulnerable to homogeneity and background knowledge attacks. Consider l-diversity or t-closeness for sensitive attributes."
+    },
+    "VALIDATION_STEPS": [
+      "1. Process all records in dataset with this configuration",
+      "2. Run KAnonymityValidator.VerifyKAnonymity(records, quasiIdentifiers, kValue)",
+      "3. Check suppression rate: if >30%, consider adjusting quasi-identifiers or generalization strategies",
+      "4. Review equivalence class distribution to ensure balanced groups",
+      "5. Test against background knowledge attacks specific to your domain"
+    ],
+    "CHOOSING_K_VALUE": {
+      "low_risk": "k=5 (standard for de-identified data)",
+      "moderate_risk": "k=10 (recommended for health data in research)",
+      "high_risk": "k=20+ (highly sensitive data or small populations)",
+      "WARNING": "Very high k values may result in excessive suppression and data utility loss"
+    },
+    "QUASI_IDENTIFIER_SELECTION": {
+      "guidance": "Include attributes that in combination could re-identify individuals",
+      "common_health_QI": ["birthDate", "gender", "postalCode", "ethnicity", "occupation"],
+      "WARNING": "Do not include direct identifiers (name, SSN, MRN) or sensitive attributes (diagnosis, medications) as quasi-identifiers",
+      "recommendation": "Conduct re-identification risk assessment to identify quasi-identifiers for your dataset"
+    },
+    "EXAMPLE_COMMAND": "dotnet run --input-folder ./data --output-folder ./anonymized --config configuration-k-anonymity-sample.json"
+  }
+}
