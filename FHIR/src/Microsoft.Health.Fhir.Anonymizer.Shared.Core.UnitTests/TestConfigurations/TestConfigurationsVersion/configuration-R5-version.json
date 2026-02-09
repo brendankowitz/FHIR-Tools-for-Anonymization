@@ -1,0 +1,19 @@
+{
+  "fhirVersion": "R5",
+  "processingError": "raise",
+  "fhirPathRules": [
+    {
+      "path": "nodesByType('HumanName')",
+      "method": "redact"
+    },
+    {
+      "path": "Resource.id",
+      "method": "cryptoHash"
+    }
+  ],
+  "parameters": {
+    "dateShiftKey": "",
+    "cryptoHashKey": "",
+    "encryptKey": ""
+  }
+}
