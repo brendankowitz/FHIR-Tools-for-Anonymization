@@ -1,0 +1,59 @@
+name: CI Build
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup .NET SDK
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: |
+          8.0.x
+          9.0.x
+
+    - name: Cache NuGet packages
+      uses: actions/cache@v4
+      with:
+        path: ~/.nuget/packages
+        key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+        restore-keys: |
+          ${{ runner.os }}-nuget-
+
+    - name: Restore DICOM dependencies
+      run: dotnet restore DICOM/Dicom.Anonymizer.sln
+
+    - name: Restore FHIR dependencies
+      run: dotnet restore FHIR/Fhir.Anonymizer.sln
+
+    - name: Build DICOM solution
+      run: dotnet build DICOM/Dicom.Anonymizer.sln --configuration Release --no-restore
+
+    - name: Build FHIR solution
+      run: dotnet build FHIR/Fhir.Anonymizer.sln --configuration Release --no-restore
+
+    - name: Run DICOM tests
+      run: dotnet test DICOM/Dicom.Anonymizer.sln --configuration Release --no-build --verbosity normal --logger "trx;LogFileName=dicom-test-results.trx"
+
+    - name: Run FHIR tests
+      run: dotnet test FHIR/Fhir.Anonymizer.sln --configuration Release --no-build --verbosity normal --logger "trx;LogFileName=fhir-test-results.trx"
+
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results
+        path: '**/*.trx'
