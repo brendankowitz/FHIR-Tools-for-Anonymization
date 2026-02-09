@@ -1,77 +1,79 @@
-﻿using System;
+// -------------------------------------------------------------------------------------------------
+// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT License (MIT). See LICENSE in the repo root for license information.
+// -------------------------------------------------------------------------------------------------
+
+using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using Hl7.Fhir.ElementModel;
 using Hl7.Fhir.Model;
-using Hl7.Fhir.Specification;
-using Hl7.FhirPath;
 using Microsoft.Extensions.Logging;
 using Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations;
-using Microsoft.Health.Fhir.Anonymizer.Core.Exceptions;
 using Microsoft.Health.Fhir.Anonymizer.Core.Extensions;
 using Microsoft.Health.Fhir.Anonymizer.Core.Models;
+using Microsoft.Health.Fhir.Anonymizer.Core.Utility;
 
 namespace Microsoft.Health.Fhir.Anonymizer.Core.Processors
 {
-    public class ResourceProcessor : IAnonymizerProcessor
+    public class ResourceProcessor
     {
-        private readonly AnonymizationFhirPathRule[] _rules;
-        private readonly Dictionary<string, IAnonymizerProcessor> _processors;
+        private static readonly IStructureDefinitionSummaryProvider s_provider = ModelInfoProvider.Instance;
+        private readonly string _metaNodeName = "meta";
+        private readonly Dictionary<AnonymizerMethod, IAnonymizerProcessor> _processors;
         private readonly ILogger _logger = AnonymizerLogging.CreateLogger<ResourceProcessor>();
+        private Dictionary<string, List<ITypedElement>> _typeToNodeLookUp;
+        private Dictionary<string, List<ITypedElement>> _nameToNodeLookUp;
 
-        private readonly HashSet<ElementNode> _visitedNodes = new HashSet<ElementNode>();
-        private readonly Dictionary<string, List<ITypedElement>> _typeToNodeLookUp = new Dictionary<string, List<ITypedElement>>();
-        private readonly Dictionary<string, List<ITypedElement>> _nameToNodeLookUp = new Dictionary<string, List<ITypedElement>>();
-
-        private static readonly PocoStructureDefinitionSummaryProvider s_provider = new PocoStructureDefinitionSummaryProvider();
-        private const string _metaNodeName = "meta";
-
-        public ResourceProcessor(AnonymizationFhirPathRule[] rules, Dictionary<string, IAnonymizerProcessor> processors)
+        public ResourceProcessor(Dictionary<AnonymizerMethod, IAnonymizerProcessor> processors)
         {
-            _rules = rules;
             _processors = processors;
         }
 
         public ProcessResult Process(ElementNode node, ProcessContext context = null, Dictionary<string, object> settings = null)
         {
-            // Initialize cache for every resource node
-            InitializeNodeCache(node);
+            EnsureArg.IsNotNull(node, nameof(node));
+
+            if (context == null)
+            {
+                context = new ProcessContext();
+            }
 
             var result = new ProcessResult();
-            var resourceRules = GetRulesByType(node.InstanceType);
+            CreateNodeLookup(node);
 
-            foreach (var rule in resourceRules)
+            foreach (var rule in context.Rules)
             {
+                var ruleContext = new ProcessContext { VisitedNodes = context.VisitedNodes, Rules = new List<AnonymizerFhirPathRule>() };
                 var ruleResult = new ProcessResult();
-                var method = rule.Method.ToUpperInvariant();
-                var ruleContext = new ProcessContext
-                {
-                    VisitedNodes = _visitedNodes
-                };
-
-                if (!_processors.ContainsKey(method.ToUpperInvariant()))
-                {
-                    throw new AnonymizerConfigurationException($"Anonymization method {method} not supported.");
-                }
-
+                var method = Enum.Parse<AnonymizerMethod>(rule.Method, true);
                 var matchNodes = GetMatchNodes(rule, node);
 
                 foreach (var matchNode in matchNodes)
                 {
+                    if (context.VisitedNodes.Contains(matchNode))
+                    {
+                        continue;
+                    }
+
+                    context.VisitedNodes.Add(matchNode);
                     ruleResult.Update(ProcessNodeRecursive((ElementNode) matchNode.ToElement(), _processors[method], ruleContext, rule.RuleSettings));
                 }
 
                 LogProcessResult(node, rule, ruleResult);
-
                 result.Update(ruleResult);
             }
+
+            // Add security tags based on operations performed
+            AddSecurityTag(node, result);
 
             return result;
         }
 
         public void AddSecurityTag(ElementNode node, ProcessResult result)
         {
-            if (node == null || result.ProcessRecords.Count == 0)
+            if (result == null || result.ProcessRecords.Count == 0)
             {
                 return;
             }
@@ -128,62 +130,31 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.Processors
             }
             else
             {
-                node.Replace(s_provider, metaNode, newMetaNode);
+                metaNode.Replace(s_provider, newMetaNode);
             }
         }
 
-        private void InitializeNodeCache(ITypedElement node)
+        private List<ITypedElement> GetMatchNodes(AnonymizerFhirPathRule rule, ElementNode node)
         {
-            _typeToNodeLookUp.Clear();
-            _nameToNodeLookUp.Clear();
+            var pathCompiled = new Regex(@"^(?<resourceType>[A-Z][a-zA-Z]+)\.(?<expression>.+)", RegexOptions.Compiled);
+            var typeCompiled = new Regex(@"^(?<type>[A-Z][a-zA-Z]+)::(?<expression>.+)", RegexOptions.Compiled);
+            var nameCompiled = new Regex(@"^(?<name>[a-z][a-zA-Z]+)::(?<expression>.+)", RegexOptions.Compiled);
 
-            InitializeNodeCacheRecursive(node);
-        }
+            var pathMatch = pathCompiled.Match(rule.Path);
+            var typeMatch = typeCompiled.Match(rule.Path);
+            var nameMatch = nameCompiled.Match(rule.Path);
 
-        private void InitializeNodeCacheRecursive(ITypedElement node)
-        {
-            foreach (var child in node.Children())
+            if (pathMatch.Success)
             {
-                // Cache instance type
-                if (_typeToNodeLookUp.ContainsKey(child.InstanceType))
+                var resourceType = pathMatch.Groups["resourceType"].Value;
+                if (!node.InstanceType.Equals(resourceType, StringComparison.InvariantCultureIgnoreCase))
                 {
-                    _typeToNodeLookUp[child.InstanceType].Add(child);
-                }
-                else
-                {
-                    _typeToNodeLookUp[child.InstanceType] = new List<ITypedElement> { child };
+                    return new List<ITypedElement>();
                 }
 
-                // Cache name
-                if (_nameToNodeLookUp.ContainsKey(child.Name))
-                {
-                    _nameToNodeLookUp[child.Name].Add(child);
-                }
-                else
-                {
-                    _nameToNodeLookUp[child.Name] = new List<ITypedElement> { child };
-                }
-
-                // Recursively process node's children except resource children, which will be processed independently as a resource
-                if (!child.IsFhirResource())
-                {
-                    InitializeNodeCacheRecursive(child);
-                }
+                var expression = pathMatch.Groups["expression"].Value;
+                return node.Select(expression).Cast<ITypedElement>().ToList();
             }
-        }
-
-        private IEnumerable<AnonymizationFhirPathRule> GetRulesByType(string typeString)
-        {
-            return _rules.Where(r => r.ResourceType.Equals(typeString)
-                                     || string.IsNullOrEmpty(r.ResourceType)
-                                     || string.Equals(Constants.GeneralResourceType, r.ResourceType)
-                                     || string.Equals(Constants.GeneralDomainResourceType, r.ResourceType));
-        }
-
-        private IEnumerable<ITypedElement> GetMatchNodes(AnonymizationFhirPathRule rule, ITypedElement node)
-        {
-            var typeMatch = AnonymizationFhirPathRule.TypeRuleRegex.Match(rule.Path);
-            var nameMatch = AnonymizationFhirPathRule.NameRuleRegex.Match(rule.Path);
 
             if (typeMatch.Success)
             {
@@ -195,52 +166,86 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.Processors
                 return GetMatchNodesFromLookUp(_nameToNodeLookUp, nameMatch.Groups["name"].Value, nameMatch.Groups["expression"].Value);
             }
 
-            /*
-            * Special case handling:
-            * Senario: FHIR path only contains resourceType: Patient, Resource.
-            * Sample AnonymizationFhirPathRule: { "path": "Patient", "method": "keep" }
-            *
-            * Current FHIR path lib do not support navigate such ResourceType FHIR path from resource in bundle.
-            * Example: navigate with FHIR path "Patient" from "Bundle.entry[0].resource[0]" is not support
-            */
-            return rule.IsResourceTypeRule ? new List<ITypedElement> { node } : node.Select(rule.Expression).ToList();
+            return new List<ITypedElement>();
         }
 
-        private static IEnumerable<ITypedElement> GetMatchNodesFromLookUp(Dictionary<string, List<ITypedElement>> lookUp, string key, string expression)
+        private List<ITypedElement> GetMatchNodesFromLookUp(
+            Dictionary<string, List<ITypedElement>> lookUp, string key, string expression)
         {
-            var matchNodes = new List<ITypedElement>();
-
-            if (!lookUp.ContainsKey(key))
+            if (string.IsNullOrEmpty(expression))
             {
-                return matchNodes;
+                return lookUp.ContainsKey(key) ? lookUp[key] : new List<ITypedElement>();
             }
 
-            if (!string.IsNullOrEmpty(expression))
+            var nodes = lookUp.ContainsKey(key) ? lookUp[key] : new List<ITypedElement>();
+            var matchedNodes = new List<ITypedElement>();
+            foreach (var node in nodes)
             {
-                var nodes = lookUp[key];
-                foreach (var node in nodes)
+                matchedNodes.AddRange(node.Select(expression).Cast<ITypedElement>());
+            }
+
+            return matchedNodes;
+        }
+
+        private void CreateNodeLookup(ITypedElement node)
+        {
+            _typeToNodeLookUp = new Dictionary<string, List<ITypedElement>>();
+            _nameToNodeLookUp = new Dictionary<string, List<ITypedElement>>();
+            TraverseNode(node);
+        }
+
+        private void TraverseNode(ITypedElement node)
+        {
+            if (node == null)
+            {
+                return;
+            }
+
+            var typeName = node.InstanceType;
+            if (!_typeToNodeLookUp.ContainsKey(typeName))
+            {
+                _typeToNodeLookUp[typeName] = new List<ITypedElement>();
+            }
+
+            _typeToNodeLookUp[typeName].Add(node);
+
+            var nodeName = node.Name;
+            if (!string.IsNullOrEmpty(nodeName))
+            {
+                if (!_nameToNodeLookUp.ContainsKey(nodeName))
                 {
-                    matchNodes.AddRange(node.Select(expression));
+                    _nameToNodeLookUp[nodeName] = new List<ITypedElement>();
                 }
-            }
-            else
-            {
-                matchNodes = lookUp[key];
+
+                _nameToNodeLookUp[nodeName].Add(node);
             }
 
-            return matchNodes;
+            foreach (var child in node.Children())
+            {
+                TraverseNode(child);
+            }
         }
 
-        private void LogProcessResult(ITypedElement node, AnonymizationFhirPathRule rule, ProcessResult resultOnRule)
+        private void LogProcessResult(ITypedElement node, AnonymizerFhirPathRule rule, ProcessResult resultOnRule)
         {
-            if (_logger.IsEnabled(LogLevel.Debug))
+            if (resultOnRule == null || resultOnRule.ProcessRecords.Count == 0)
             {
-                string resourceId = node.GetNodeId();
-                foreach (var processRecord in resultOnRule.ProcessRecords)
+                return;
+            }
+
+            var resourceId = node.GetResourceId();
+            var processRecordMap = resultOnRule.GetProcessRecordMap();
+            
+            foreach (var entry in processRecordMap)
+            {
+                var operation = entry.Key;
+                var matchedNodes = entry.Value;
+                
+                if (matchedNodes != null && matchedNodes.Any())
                 {
-                    foreach (var matchNode in processRecord.Value)
+                    foreach (var matchNode in matchedNodes)
                     {
-                        _logger.LogDebug($"[{resourceId}]: Rule '{rule.Path}' matches '{matchNode.Location}' and perform operation '{processRecord.Key}'");
+                        _logger.LogDebug($"[{resourceId}]: Rule '{rule.Path}' matches '{matchNode.Location}' and perform operation '{operation}'");
                     }
                 }
             }
@@ -248,22 +253,14 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.Processors
 
         public ProcessResult ProcessNodeRecursive(ElementNode node, IAnonymizerProcessor processor, ProcessContext context, Dictionary<string, object> settings)
         {
+            EnsureArg.IsNotNull(node, nameof(node));
+            EnsureArg.IsNotNull(processor, nameof(processor));
+
             var result = new ProcessResult();
-            if (_visitedNodes.Contains(node))
+            result.Update(processor.Process(node, context, settings));
+
+            foreach (var child in node.Children().Cast<ElementNode>().ToList())
             {
-                return result;
-            }
-
-            result = processor.Process(node, context, settings);
-            _visitedNodes.Add(node);
-
-            foreach (var child in node.Children())
-            {
-                if (child.IsFhirResource())
-                {
-                    continue;
-                }
-
                 result.Update(ProcessNodeRecursive((ElementNode)child, processor, context, settings));
             }
 

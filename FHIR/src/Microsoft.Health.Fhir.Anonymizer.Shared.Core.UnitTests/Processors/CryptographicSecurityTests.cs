@@ -127,22 +127,22 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.Processors
         [Fact]
         public void DifferentialPrivacyProcessor_ShouldNotUseSystemRandom()
         {
-            // This test verifies that System.Random is NOT used anywhere in the implementation.
+            // This test uses reflection to verify that System.Random is NOT used in DifferentialPrivacyProcessor.
             // System.Random is cryptographically weak and would break differential privacy guarantees.
             
             var processorType = typeof(DifferentialPrivacyProcessor);
-            var sourceCode = GetTypeSourceCode(processorType);
+            var fields = processorType.GetFields(BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static);
+            
+            // Check that no fields are of type System.Random
+            foreach (var field in fields)
+            {
+                Assert.False(field.FieldType == typeof(Random), 
+                    $"SECURITY VIOLATION: DifferentialPrivacyProcessor uses System.Random field '{field.Name}'. " +
+                    $"Must use System.Security.Cryptography.RandomNumberGenerator for cryptographic security.");
+            }
 
-            // Verify RandomNumberGenerator is used (good)
-            Assert.Contains("RandomNumberGenerator", sourceCode);
-            Assert.Contains("System.Security.Cryptography", sourceCode);
-
-            // Verify System.Random is NOT used (would be bad)
-            Assert.DoesNotContain("new Random()", sourceCode);
-            Assert.DoesNotContain("Random random", sourceCode);
-
-            _output.WriteLine("✓ Verified: DifferentialPrivacyProcessor uses cryptographically secure RandomNumberGenerator");
-            _output.WriteLine("✓ Verified: No usage of weak System.Random detected");
+            _output.WriteLine("✓ Verified: No System.Random fields detected in DifferentialPrivacyProcessor");
+            _output.WriteLine("✓ Implementation should use System.Security.Cryptography.RandomNumberGenerator");
         }
 
         [Fact]
@@ -226,17 +226,6 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.Processors
             _output.WriteLine($"Parallel processing: {uniqueValues} unique values from 100 operations");
 
             Assert.True(uniqueValues > 90, $"Expected >90 unique values in parallel execution, got {uniqueValues}");
-        }
-
-        private string GetTypeSourceCode(Type type)
-        {
-            // This is a simplified check - in production, you might want to use Roslyn analyzers
-            // For this test, we'll check the assembly's embedded resources or use reflection
-            var assembly = type.Assembly;
-            var resourceName = $"{type.Namespace}.{type.Name}.cs";
-
-            // Return a placeholder that indicates we're using the right cryptographic primitives
-            return "using System.Security.Cryptography; RandomNumberGenerator.Create()";
         }
 
         private double ComputeCorrelation(List<decimal> x, List<decimal> y)

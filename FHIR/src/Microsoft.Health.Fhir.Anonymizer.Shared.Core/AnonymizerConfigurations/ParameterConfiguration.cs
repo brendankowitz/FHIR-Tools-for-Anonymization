@@ -1,12 +1,16 @@
-using Newtonsoft.Json.Linq;
+using System;
 using System.Collections.Generic;
 using System.Runtime.Serialization;
+using Microsoft.Extensions.Logging;
+using Newtonsoft.Json.Linq;
 
 namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
 {
     [DataContract]
     public class ParameterConfiguration
     {
+        private static readonly ILogger s_logger = AnonymizerLogging.CreateLogger<ParameterConfiguration>();
+
         [DataMember(Name = "dateShiftKey")]
         public string DateShiftKey { get; set; }
 
@@ -44,6 +48,138 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
         public JObject CustomSettings { get; set; }
 
         public string DateShiftKeyPrefix { get; set; }
+
+        /// <summary>
+        /// Validate configuration for security issues and placeholder values
+        /// SECURITY: Rejects dangerous placeholder values that should never be used in production
+        /// </summary>
+        public void Validate()
+        {
+            // Check for placeholder HMAC keys
+            if (!string.IsNullOrEmpty(CryptoHashKey) && 
+                (CryptoHashKey.Contains("$HMAC_KEY") || 
+                 CryptoHashKey.Contains("YOUR_KEY_HERE") ||
+                 CryptoHashKey.Contains("PLACEHOLDER") ||
+                 CryptoHashKey.Equals("changeme", StringComparison.OrdinalIgnoreCase)))
+            {
+                throw new InvalidOperationException(
+                    "SECURITY ERROR: Placeholder cryptographic key detected. " +
+                    "The 'cryptoHashKey' contains a placeholder value ('$HMAC_KEY', 'YOUR_KEY_HERE', etc.) " +
+                    "which must be replaced with a cryptographically secure key before use. " +
+                    "\n\nTO GENERATE A SECURE KEY: " +
+                    "\n  openssl rand -base64 32 " +
+                    "\n  or " +
+                    "\n  pwsh -Command \"[Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Minimum 0 -Maximum 256 }))\" " +
+                    "\n\nUsing placeholder keys in production compromises the security of cryptographic " +
+                    "operations and may lead to predictable hash values. Never commit actual keys to " +
+                    "version control - use environment variables or secure key management services.");
+            }
+
+            // Check for placeholder encryption keys
+            if (!string.IsNullOrEmpty(EncryptKey) && 
+                (EncryptKey.Contains("PLACEHOLDER") || 
+                 EncryptKey.Contains("YOUR_KEY_HERE") ||
+                 EncryptKey.Equals("changeme", StringComparison.OrdinalIgnoreCase)))
+            {
+                throw new InvalidOperationException(
+                    "SECURITY ERROR: Placeholder encryption key detected. " +
+                    "The 'encryptKey' contains a placeholder value that must be replaced with a " +
+                    "cryptographically secure key before use. Generate a secure key using: " +
+                    "openssl rand -base64 32");
+            }
+
+            // Check for placeholder date shift keys
+            if (!string.IsNullOrEmpty(DateShiftKey) && 
+                (DateShiftKey.Contains("PLACEHOLDER") || 
+                 DateShiftKey.Contains("YOUR_KEY_HERE") ||
+                 DateShiftKey.Equals("changeme", StringComparison.OrdinalIgnoreCase)))
+            {
+                throw new InvalidOperationException(
+                    "SECURITY ERROR: Placeholder date shift key detected. " +
+                    "The 'dateShiftKey' contains a placeholder value that must be replaced with a " +
+                    "cryptographically secure key before use. Generate a secure key using: " +
+                    "openssl rand -base64 32");
+            }
+
+            // Validate differential privacy settings
+            if (DifferentialPrivacySettings != null)
+            {
+                ValidateDifferentialPrivacySettings(DifferentialPrivacySettings);
+            }
+
+            // Validate k-anonymity settings
+            if (KAnonymitySettings != null)
+            {
+                ValidateKAnonymitySettings(KAnonymitySettings);
+            }
+        }
+
+        /// <summary>
+        /// Validate differential privacy configuration parameters
+        /// </summary>
+        private void ValidateDifferentialPrivacySettings(DifferentialPrivacyParameterConfiguration settings)
+        {
+            if (settings.Epsilon <= 0)
+            {
+                throw new ArgumentException("Differential privacy epsilon must be greater than 0");
+            }
+
+            if (settings.Epsilon > 10.0)
+            {
+                throw new ArgumentException(
+                    $"Differential privacy epsilon value {settings.Epsilon} exceeds maximum of 10.0. " +
+                    "High epsilon values provide minimal privacy protection. See configuration comments for guidance.");
+            }
+
+            if (settings.Epsilon > 1.0)
+            {
+                s_logger.LogWarning(
+                    $"Differential privacy epsilon value {settings.Epsilon} is high (>1.0). " +
+                    "This provides weaker privacy guarantees. Consider using epsilon ≤ 1.0 for moderate privacy " +
+                    "or epsilon ≤ 0.1 for strong privacy (NIST SP 800-188 guidance for health data).");
+            }
+
+            if (settings.Delta < 0 || settings.Delta > 1)
+            {
+                throw new ArgumentException("Differential privacy delta must be between 0 and 1");
+            }
+
+            if (settings.Sensitivity <= 0)
+            {
+                throw new ArgumentException("Differential privacy sensitivity must be greater than 0");
+            }
+
+            if (settings.MaxCumulativeEpsilon <= 0)
+            {
+                throw new ArgumentException("Differential privacy maxCumulativeEpsilon must be greater than 0");
+            }
+        }
+
+        /// <summary>
+        /// Validate k-anonymity configuration parameters
+        /// </summary>
+        private void ValidateKAnonymitySettings(KAnonymityParameterConfiguration settings)
+        {
+            if (settings.KValue < 2)
+            {
+                throw new ArgumentException(
+                    $"K-anonymity k-value must be at least 2 (provided: {settings.KValue}). " +
+                    "k=1 provides no privacy protection.");
+            }
+
+            if (settings.KValue == 2)
+            {
+                s_logger.LogWarning(
+                    "K-anonymity k-value is 2 (minimal). Consider k ≥ 5 for better privacy protection " +
+                    "(recommended by HIPAA Safe Harbor guidance).");
+            }
+
+            if (settings.SuppressionThreshold < 0 || settings.SuppressionThreshold > 1)
+            {
+                throw new ArgumentException(
+                    "K-anonymity suppression threshold must be between 0 and 1 (represents percentage)");
+            }
+        }
     }
 
     /// <summary>

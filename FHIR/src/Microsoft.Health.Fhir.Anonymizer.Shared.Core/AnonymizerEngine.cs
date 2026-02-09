@@ -125,26 +125,10 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core
                
                 return anonymizedResource;
             }
-            catch (CryptographicException)
-            {
-                // SECURITY: Allow cryptographic exceptions to propagate unchanged
-                throw;
-            }
-            catch (InvalidOperationException invalidOpEx) when (invalidOpEx.Message.Contains("budget"))
-            {
-                // SECURITY: Allow privacy budget violations to propagate unchanged
-                throw;
-            }
-            catch (AnonymizerProcessingException)
-            {
-                // Application-specific exceptions can be re-thrown as-is
-                throw;
-            }
             catch (Exception ex)
             {
-                // Wrap other exceptions for context but preserve inner exception
-                _logger.LogError(ex, "Exception occurred during resource anonymization");
-                throw new AnonymizerOperationException("Failed to anonymize FHIR resource", ex);
+                HandleAnonymizationException(ex, "resource anonymization");
+                throw; // Never reached, but required for compiler
             }
         }
 
@@ -169,34 +153,66 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core
 
                 return anonymizedElement.ToJson();
             }
-            catch (InvalidInputException)
+            catch (Exception ex)
             {
-                // Input validation exceptions should propagate unchanged
-                throw;
+                HandleAnonymizationException(ex, "JSON anonymization");
+                throw; // Never reached, but required for compiler
             }
-            catch (CryptographicException cryptoEx)
+        }
+
+        /// <summary>
+        /// Centralized exception handling for anonymization operations.
+        /// Preserves security-relevant exceptions (cryptographic, privacy budget, validation)
+        /// with their original types and context. Wraps other exceptions for clarity.
+        /// </summary>
+        /// <param name="ex">The exception to handle</param>
+        /// <param name="operationContext">Description of the operation for logging (e.g., "JSON anonymization")</param>
+        private void HandleAnonymizationException(Exception ex, string operationContext)
+        {
+            // SECURITY: Allow input validation exceptions to propagate unchanged
+            // These indicate data quality issues, not security failures
+            if (ex is InvalidInputException)
             {
-                // SECURITY: Preserve cryptographic exception type
-                _logger.LogError(cryptoEx, "[SECURITY] Cryptographic failure during JSON anonymization");
-                throw;
+                throw ex;
             }
-            catch (InvalidOperationException invalidOpEx) when (invalidOpEx.Message.Contains("budget"))
+
+            // SECURITY: Allow cryptographic exceptions to propagate with original type
+            // These indicate serious security failures (corrupted keys, tampering, implementation errors)
+            if (ex is CryptographicException)
             {
-                // SECURITY: Preserve privacy budget exception type
-                _logger.LogError(invalidOpEx, "[SECURITY] Privacy budget violation during JSON anonymization");
-                throw;
+                _logger.LogError(ex, $"[SECURITY] Cryptographic operation failed during {operationContext}. " +
+                                     "This may indicate corrupted keys, tampering, or implementation errors.");
+                throw ex;
             }
-            catch (AnonymizerProcessingException processingEx)
+
+            // SECURITY: Allow privacy budget violations to propagate with specific type
+            // Masking these could lead to privacy breaches by hiding epsilon exhaustion
+            if (ex is InvalidOperationException invalidOpEx && invalidOpEx.Message.Contains("budget"))
             {
-                // Application exceptions can be wrapped with more context
-                _logger.LogError(processingEx, "Processing error during JSON anonymization");
-                throw new AnonymizerOperationException("Anonymize FHIR Json failed", processingEx);
+                _logger.LogError(ex, $"[SECURITY] Privacy budget violation during {operationContext}. " +
+                                     "Operation denied to prevent epsilon exhaustion.");
+                throw ex;
             }
-            catch (Exception innerException)
+
+            // SECURITY: Allow ArgumentException for configuration/parameter validation to propagate
+            // These often indicate security-relevant misconfigurations (weak keys, invalid privacy parameters)
+            if (ex is ArgumentException)
             {
-                _logger.LogError(innerException, "Unexpected exception during JSON anonymization");
-                throw new AnonymizerOperationException("Anonymize FHIR Json failed", innerException);
+                _logger.LogError(ex, $"[SECURITY] Invalid argument during {operationContext}. " +
+                                     "This may indicate security-relevant configuration issues.");
+                throw ex;
             }
+
+            // Application-specific processing exceptions should propagate with their type preserved
+            if (ex is AnonymizerProcessingException)
+            {
+                _logger.LogError(ex, $"Processing error during {operationContext}");
+                throw ex;
+            }
+
+            // Wrap all other exceptions to provide context while preserving the inner exception
+            _logger.LogError(ex, $"Unexpected exception during {operationContext}");
+            throw new AnonymizerOperationException($"Anonymization failed during {operationContext}", ex);
         }
 
         private void InitializeProcessors(AnonymizerConfigurationManager configurationManager)

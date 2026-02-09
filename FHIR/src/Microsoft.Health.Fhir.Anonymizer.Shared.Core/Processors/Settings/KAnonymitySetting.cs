@@ -1,5 +1,7 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
+using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
 
 namespace Microsoft.Health.Fhir.Anonymizer.Core.Processors.Settings
@@ -9,6 +11,8 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.Processors.Settings
     /// </summary>
     public class KAnonymitySetting
     {
+        private static readonly ILogger s_logger = AnonymizerLogging.CreateLogger<KAnonymitySetting>();
+
         /// <summary>
         /// Minimum group size for k-anonymity (k value)
         /// </summary>
@@ -109,7 +113,55 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.Processors.Settings
                 }
             }
 
+            // Validate k-value during initialization
+            ValidateKValue(setting.K);
+
             return setting;
+        }
+
+        /// <summary>
+        /// Validate k-value with clear privacy-aware error messages
+        /// K-anonymity requires k >= 2 to provide any privacy protection
+        /// </summary>
+        private static void ValidateKValue(int k)
+        {
+            if (k < 2)
+            {
+                throw new ArgumentException(
+                    $"K-anonymity k-value must be at least 2 (provided: {k}). " +
+                    "PRIVACY REQUIREMENT: k=1 provides NO privacy protection as each record forms its own equivalence class. " +
+                    "\n\nK-ANONYMITY GUIDANCE: " +
+                    "\n  - k=2: Minimal privacy (each record indistinguishable from at least 1 other) " +
+                    "\n  - k=5: Recommended minimum for most use cases (HIPAA Safe Harbor guidance) " +
+                    "\n  - k=10+: Strong privacy for sensitive data " +
+                    "\n  - k=100+: Very strong privacy, but may require aggressive generalization " +
+                    "\n\nHigher k values provide stronger privacy but may reduce data utility through " +
+                    "increased generalization or suppression. Choose k based on your privacy requirements " +
+                    "and regulatory obligations.");
+            }
+
+            if (k == 2)
+            {
+                s_logger.LogWarning(
+                    "═══════════════════════════════════════════════════════════════════\n" +
+                    "║ PRIVACY WARNING: Minimal K-Anonymity Value                      ║\n" +
+                    "╠═════════════════════════════════════════════════════════════════╣\n" +
+                    "║ k-value: 2 (minimum acceptable)                                ║\n" +
+                    "║                                                                 ║\n" +
+                    "║ This provides MINIMAL privacy protection.                       ║\n" +
+                    "║                                                                 ║\n" +
+                    "║ IMPLICATIONS:                                                   ║\n" +
+                    "║ - Each record only needs 1 similar record for protection        ║\n" +
+                    "║ - Vulnerable to background knowledge attacks                    ║\n" +
+                    "║ - May not meet regulatory requirements                          ║\n" +
+                    "║                                                                 ║\n" +
+                    "║ RECOMMENDATIONS:                                                ║\n" +
+                    "║ - HIPAA Safe Harbor: k ≥ 5 recommended                          ║\n" +
+                    "║ - Sensitive health data: k ≥ 10 recommended                     ║\n" +
+                    "║ - Consider increasing k for better privacy protection           ║\n" +
+                    "║ - Document justification for low k-value                        ║\n" +
+                    "╚═════════════════════════════════════════════════════════════════╝");
+            }
         }
     }
 }

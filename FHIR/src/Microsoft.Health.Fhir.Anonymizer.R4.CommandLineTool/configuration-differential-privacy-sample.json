@@ -1,1 +1,145 @@
-Added comprehensive inline comments explaining: privacy implications of each parameter, epsilon guidance with specific ranges, sensitivity calculation guidance, mechanism selection rationale, budget context security requirements, composition and budget exhaustion warnings, regulatory compliance notes (HIPAA, GDPR, FDA), choosing epsilon/delta values by use case, audit logging capabilities, and mitigation strategies
+{
+  "fhirVersion": "R4",
+  "processingErrors": "raise",
+  "pathRules": [
+    {
+      "path": "Patient.birthDate",
+      "method": "dateShift",
+      "span": 50
+    },
+    {
+      "path": "Patient.identifier",
+      "method": "cryptoHash"
+    },
+    {
+      "path": "Patient.name",
+      "method": "redact"
+    },
+    {
+      "path": "Patient.telecom",
+      "method": "redact"
+    },
+    {
+      "path": "Patient.address.line",
+      "method": "redact"
+    },
+    {
+      "path": "Patient.address.city",
+      "method": "redact"
+    },
+    {
+      "path": "Observation.value[x].value",
+      "method": "differentialPrivacy",
+      "epsilon": 0.1,
+      "delta": 0.00001,
+      "sensitivity": 1.0,
+      "mechanism": "laplace"
+    }
+  ],
+  "parameters": {
+    "dateShiftKey": "YOUR_SECURE_DATE_SHIFT_KEY_HERE",
+    "dateShiftScope": "resource",
+    "cryptoHashKey": "YOUR_SECURE_HASH_KEY_HERE",
+    "differentialPrivacySettings": {
+      "epsilon": 0.1,
+      "delta": 0.00001,
+      "sensitivity": 1.0,
+      "mechanism": "laplace",
+      "maxCumulativeEpsilon": 1.0,
+      "useAdvancedComposition": false
+    }
+  },
+  "_comments": {
+    "SECURITY_WARNING": "This is a SAMPLE configuration. DO NOT use in production without modification!",
+    "REQUIRED_CHANGES": [
+      "Replace all placeholder keys (dateShiftKey, cryptoHashKey) with cryptographically secure random keys",
+      "Generate keys using: openssl rand -base64 32",
+      "Store keys securely (environment variables, key vault, HSM)",
+      "Never commit keys to source control",
+      "Review epsilon and sensitivity values for your specific use case"
+    ],
+    "DIFFERENTIAL_PRIVACY_GUIDANCE": {
+      "epsilon": {
+        "description": "Privacy budget - lower values = stronger privacy",
+        "recommendations": {
+          "strong_privacy": "ε ≤ 0.1 (recommended for sensitive health data per NIST SP 800-188)",
+          "moderate_privacy": "ε = 0.5-1.0 (reasonable for many applications)",
+          "weak_privacy": "ε = 1.0-10.0 (use only when data utility is critical)",
+          "minimal_privacy": "ε > 10 (provides minimal privacy guarantee)"
+        },
+        "WARNING": "Epsilon values accumulate across queries via sequential composition. Total privacy loss = sum of all epsilon values consumed."
+      },
+      "delta": {
+        "description": "Failure probability - probability that privacy guarantee fails",
+        "recommendation": "Should be much smaller than 1/n where n is dataset size. Typical: 1e-5 to 1e-10",
+        "note": "Only applies to Gaussian mechanism; Laplace mechanism has δ=0 (pure ε-DP)"
+      },
+      "sensitivity": {
+        "description": "Maximum change in output from adding/removing one record",
+        "examples": {
+          "counting_queries": "sensitivity = 1",
+          "bounded_sum": "sensitivity = max - min (for values in [min, max])",
+          "average_mean": "typically 1-10 depending on data range"
+        },
+        "note": "Higher sensitivity requires more noise for the same epsilon"
+      },
+      "mechanism": {
+        "laplace": "Standard choice for numeric queries. Provides pure ε-DP (δ=0). Noise scale = sensitivity/ε.",
+        "gaussian": "Use for (ε,δ)-DP when approximate DP is acceptable. Requires δ > 0. Better utility for large datasets.",
+        "exponential": "For categorical/selection queries. Currently implemented using Laplace for numeric data."
+      },
+      "maxCumulativeEpsilon": {
+        "description": "Maximum cumulative epsilon budget before warning",
+        "recommendation": "1.0 is reasonable for most healthcare research applications per NIST guidance",
+        "WARNING": "Exceeding this budget across multiple queries degrades privacy guarantees"
+      }
+    },
+    "REGULATORY_COMPLIANCE": {
+      "HIPAA": "Differential privacy can support Expert Determination under HIPAA Safe Harbor when properly configured and validated",
+      "GDPR": "Differential privacy is recognized as a state-of-the-art pseudonymization technique under GDPR Article 32",
+      "FDA": "For clinical trials, consult with legal/compliance teams regarding 21 CFR Part 11 and data integrity requirements",
+      "DISCLAIMER": "This tool provides technical controls. Legal compliance requires organizational safeguards, DPIAs, and professional counsel."
+    },
+    "BUDGET_CONTEXT_SECURITY": {
+      "CRITICAL": "Always specify 'budgetContext' in settings to prevent unintended budget sharing across datasets",
+      "GUIDANCE": "Use unique budget contexts per dataset/file/study to ensure proper privacy accounting",
+      "EXAMPLE": "budgetContext: 'study-123-cohort-A-2024'"
+    },
+    "COMPOSITION_AND_BUDGET_EXHAUSTION": {
+      "sequential_composition": "Total privacy loss = Σε_i across all queries. Simple but conservative.",
+      "advanced_composition": "Provides tighter bounds for many queries. Not yet implemented - useAdvancedComposition flag logs warning.",
+      "budget_exhaustion": "When cumulative epsilon exceeds maxCumulativeEpsilon, operations are DENIED to prevent privacy loss."
+    },
+    "AUDIT_LOGGING": {
+      "recommendation": "Enable comprehensive logging to track: epsilon consumption per context, cumulative privacy loss, query patterns, budget warnings/violations",
+      "purpose": "Essential for demonstrating compliance and detecting privacy budget abuse"
+    },
+    "CHOOSING_EPSILON_DELTA": {
+      "use_case_examples": {
+        "public_health_surveillance": "ε=0.1-0.5, δ=1e-6 (strong privacy for population statistics)",
+        "clinical_research_aggregates": "ε=0.5-1.0, δ=1e-5 (moderate privacy, better utility)",
+        "quality_metrics_reporting": "ε=1.0-3.0, δ=1e-5 (weaker privacy for operational dashboards)"
+      },
+      "tradeoffs": "Lower epsilon = stronger privacy but more noise. Balance privacy needs against data utility requirements."
+    },
+    "MITIGATION_STRATEGIES": {
+      "high_utility_requirements": [
+        "Increase sample size to reduce relative noise impact",
+        "Use advanced composition to allocate budget efficiently",
+        "Apply post-processing (filtering, smoothing) which preserves DP guarantees",
+        "Consider local differential privacy for decentralized scenarios"
+      ],
+      "high_privacy_requirements": [
+        "Reduce epsilon to 0.01-0.1",
+        "Use Gaussian mechanism with very small delta",
+        "Limit number of queries per dataset",
+        "Implement query auditing and budget forecasting"
+      ]
+    },
+    "REFERENCES": [
+      "NIST Special Publication 800-188: De-Identifying Government Datasets (2023 Draft)",
+      "Dwork & Roth (2014): The Algorithmic Foundations of Differential Privacy",
+      "Apple Differential Privacy Team (2017): Learning with Privacy at Scale"
+    ]
+  }
+}
