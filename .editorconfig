@@ -1,0 +1,234 @@
+# EditorConfig is awesome: https://EditorConfig.org
+
+# Top-most EditorConfig file
+root = true
+
+########################################
+# All files
+########################################
+[*]
+charset = utf-8
+insert_final_newline = true
+trim_trailing_whitespace = true
+end_of_line = lf
+
+########################################
+# Code files
+########################################
+[*.{cs,csx,vb,vbx}]
+indent_size = 4
+indent_style = space
+
+########################################
+# C# files
+########################################
+[*.cs]
+
+# New line preferences
+csharp_new_line_before_open_brace = all
+csharp_new_line_before_else = true
+csharp_new_line_before_catch = true
+csharp_new_line_before_finally = true
+csharp_new_line_before_members_in_object_initializers = true
+csharp_new_line_before_members_in_anonymous_types = true
+csharp_new_line_between_query_expression_clauses = true
+
+# Indentation preferences
+csharp_indent_case_contents = true
+csharp_indent_switch_labels = true
+csharp_indent_labels = no_change
+csharp_indent_block_contents = true
+csharp_indent_braces = false
+csharp_indent_case_contents_when_block = false
+
+# Space preferences
+csharp_space_after_cast = false
+csharp_space_after_keywords_in_control_flow_statements = true
+csharp_space_between_parentheses = false
+csharp_space_before_colon_in_inheritance_clause = true
+csharp_space_after_colon_in_inheritance_clause = true
+csharp_space_around_binary_operators = before_and_after
+csharp_space_between_method_declaration_parameter_list_parentheses = false
+csharp_space_between_method_declaration_empty_parameter_list_parentheses = false
+csharp_space_between_method_declaration_name_and_open_parenthesis = false
+csharp_space_between_method_call_parameter_list_parentheses = false
+csharp_space_between_method_call_empty_parameter_list_parentheses = false
+csharp_space_between_method_call_name_and_opening_parenthesis = false
+csharp_space_after_comma = true
+csharp_space_after_dot = false
+
+# Organize usings
+dotnet_sort_system_directives_first = true
+dotnet_separate_import_directive_groups = false
+
+# Code style defaults
+csharp_using_directive_placement = outside_namespace
+csharp_prefer_braces = true:warning
+csharp_preserve_single_line_blocks = true
+csharp_preserve_single_line_statements = false
+csharp_prefer_static_local_function = true:suggestion
+csharp_prefer_simple_using_statement = true:suggestion
+csharp_style_prefer_switch_expression = true:suggestion
+
+# Expression-level preferences
+dotnet_style_object_initializer = true:suggestion
+dotnet_style_collection_initializer = true:suggestion
+dotnet_style_explicit_tuple_names = true:suggestion
+dotnet_style_prefer_inferred_tuple_names = true:suggestion
+dotnet_style_prefer_inferred_anonymous_type_member_names = true:suggestion
+dotnet_style_prefer_auto_properties = true:suggestion
+dotnet_style_prefer_conditional_expression_over_assignment = true:silent
+dotnet_style_prefer_conditional_expression_over_return = true:silent
+csharp_prefer_simple_default_expression = true:suggestion
+
+# Expression-bodied members
+csharp_style_expression_bodied_methods = false:silent
+csharp_style_expression_bodied_constructors = false:silent
+csharp_style_expression_bodied_operators = false:silent
+csharp_style_expression_bodied_properties = true:suggestion
+csharp_style_expression_bodied_indexers = true:suggestion
+csharp_style_expression_bodied_accessors = true:suggestion
+csharp_style_expression_bodied_lambdas = true:suggestion
+csharp_style_expression_bodied_local_functions = false:silent
+
+# Pattern matching
+csharp_style_pattern_matching_over_is_with_cast_check = true:suggestion
+csharp_style_pattern_matching_over_as_with_null_check = true:suggestion
+csharp_style_inlined_variable_declaration = true:suggestion
+
+# Null checking preferences
+csharp_style_throw_expression = true:suggestion
+csharp_style_conditional_delegate_call = true:suggestion
+
+# Other features
+csharp_style_prefer_index_operator = true:suggestion
+csharp_style_prefer_range_operator = true:suggestion
+csharp_style_pattern_local_over_anonymous_function = true:suggestion
+
+# Modifier preferences
+csharp_prefer_static_anonymous_function = true:suggestion
+csharp_preferred_modifier_order = public,private,protected,internal,static,extern,new,virtual,abstract,sealed,override,readonly,unsafe,volatile,async:suggestion
+
+########################################
+# .NET Naming Conventions
+########################################
+
+# Style Definitions
+dotnet_naming_style.pascal_case_style.capitalization = pascal_case
+
+dotnet_naming_style.camel_case_style.capitalization = camel_case
+
+dotnet_naming_style.underscore_camel_case_style.capitalization = camel_case
+dotnet_naming_style.underscore_camel_case_style.required_prefix = _
+
+dotnet_naming_style.I_prefix_style.capitalization = pascal_case
+dotnet_naming_style.I_prefix_style.required_prefix = I
+
+# Use PascalCase for constant fields
+dotnet_naming_rule.constant_fields_should_be_pascal_case.severity = suggestion
+dotnet_naming_rule.constant_fields_should_be_pascal_case.symbols = constant_fields
+dotnet_naming_rule.constant_fields_should_be_pascal_case.style = pascal_case_style
+dotnet_naming_symbols.constant_fields.applicable_kinds = field
+dotnet_naming_symbols.constant_fields.applicable_accessibilities = *
+dotnet_naming_symbols.constant_fields.required_modifiers = const
+
+# Use _camelCase for private fields
+dotnet_naming_rule.private_fields_should_be_underscore_camel_case.severity = suggestion
+dotnet_naming_rule.private_fields_should_be_underscore_camel_case.symbols = private_fields
+dotnet_naming_rule.private_fields_should_be_underscore_camel_case.style = underscore_camel_case_style
+dotnet_naming_symbols.private_fields.applicable_kinds = field
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private
+
+# Use PascalCase for public fields
+dotnet_naming_rule.public_fields_should_be_pascal_case.severity = suggestion
+dotnet_naming_rule.public_fields_should_be_pascal_case.symbols = public_fields
+dotnet_naming_rule.public_fields_should_be_pascal_case.style = pascal_case_style
+dotnet_naming_symbols.public_fields.applicable_kinds = field
+dotnet_naming_symbols.public_fields.applicable_accessibilities = public,internal,protected,protected_internal,private_protected
+
+# Interfaces must be prefixed with I
+dotnet_naming_rule.interfaces_should_be_prefixed_with_I.severity = warning
+dotnet_naming_rule.interfaces_should_be_prefixed_with_I.symbols = interfaces
+dotnet_naming_rule.interfaces_should_be_prefixed_with_I.style = I_prefix_style
+dotnet_naming_symbols.interfaces.applicable_kinds = interface
+
+# Classes, structs, methods, enums, events, properties, namespaces, delegates must be PascalCase
+dotnet_naming_rule.general_naming.severity = suggestion
+dotnet_naming_rule.general_naming.symbols = general
+dotnet_naming_rule.general_naming.style = pascal_case_style
+dotnet_naming_symbols.general.applicable_kinds = class,struct,enum,property,method,event,namespace,delegate
+
+# Everything else is camelCase
+dotnet_naming_rule.everything_else_naming.severity = suggestion
+dotnet_naming_rule.everything_else_naming.symbols = everything_else
+dotnet_naming_rule.everything_else_naming.style = camel_case_style
+dotnet_naming_symbols.everything_else.applicable_kinds = *
+
+########################################
+# C# Code Quality
+########################################
+
+# CA1822: Mark members as static
+dotnet_diagnostic.CA1822.severity = suggestion
+
+# IDE0005: Remove unnecessary using directives
+dotnet_diagnostic.IDE0005.severity = warning
+
+# IDE0055: Fix formatting
+dotnet_diagnostic.IDE0055.severity = warning
+
+########################################
+# XML project files
+########################################
+[*.{csproj,vbproj,vcxproj,vcxproj.filters,proj,projitems,shproj}]
+indent_size = 2
+
+########################################
+# XML config files
+########################################
+[*.{props,targets,ruleset,config,nuspec,resx,vsixmanifest,vsct}]
+indent_size = 2
+
+########################################
+# JSON files
+########################################
+[*.json]
+indent_size = 2
+
+########################################
+# YAML files
+########################################
+[*.{yml,yaml}]
+indent_size = 2
+
+########################################
+# Markdown files
+########################################
+[*.md]
+trim_trailing_whitespace = false
+indent_size = 2
+
+########################################
+# Shell scripts
+########################################
+[*.sh]
+end_of_line = lf
+indent_size = 2
+
+########################################
+# PowerShell scripts
+########################################
+[*.{ps1,psm1,psd1}]
+indent_size = 4
+
+########################################
+# Solution files
+########################################
+[*.sln]
+indent_style = tab
+
+########################################
+# Makefile
+########################################
+[Makefile]
+indent_style = tab
