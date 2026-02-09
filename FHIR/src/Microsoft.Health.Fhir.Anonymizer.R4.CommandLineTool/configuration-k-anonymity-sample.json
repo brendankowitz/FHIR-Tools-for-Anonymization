@@ -1,0 +1,57 @@
+{
+  "fhirVersion": "R4",
+  "processingErrors": "raise",
+  "fhirPathRules": [
+    {
+      "path": "Patient.birthDate",
+      "method": "kAnonymity",
+      "quasiIdentifiers": ["Patient.birthDate", "Patient.address.postalCode", "Patient.gender"],
+      "kValue": 5,
+      "generalizationStrategy": "ageRange",
+      "ageRangeYears": 5
+    },
+    {
+      "path": "Patient.address.postalCode",
+      "method": "kAnonymity",
+      "quasiIdentifiers": ["Patient.birthDate", "Patient.address.postalCode", "Patient.gender"],
+      "kValue": 5,
+      "generalizationStrategy": "hierarchy",
+      "hierarchyLevel": 3
+    },
+    {
+      "path": "Patient.gender",
+      "method": "kAnonymity",
+      "quasiIdentifiers": ["Patient.birthDate", "Patient.address.postalCode", "Patient.gender"],
+      "kValue": 5,
+      "generalizationStrategy": "retain"
+    },
+    {
+      "path": "Patient.identifier",
+      "method": "cryptoHash",
+      "hashFunction": "SHA256",
+      "hmacKey": "$HMAC_KEY"
+    },
+    {
+      "path": "Patient.name",
+      "method": "redact"
+    },
+    {
+      "path": "Patient.telecom",
+      "method": "redact"
+    },
+    {
+      "path": "Patient.address.line",
+      "method": "redact"
+    },
+    {
+      "path": "Patient.address.city",
+      "method": "generalize",
+      "cases": [
+        {
+          "expression": "$this",
+          "method": "redact"
+        }
+      ]
+    }
+  ]
+}

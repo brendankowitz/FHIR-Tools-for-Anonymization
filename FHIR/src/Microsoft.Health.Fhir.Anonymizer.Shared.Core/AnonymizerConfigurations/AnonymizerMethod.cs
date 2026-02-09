@@ -1,4 +1,4 @@
-﻿namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
+namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
 {
     public enum AnonymizerMethod
     {
@@ -9,6 +9,8 @@
         Encrypt,
         Perturb,
         Keep,
-        Generalize
+        Generalize,
+        KAnonymity,
+        DifferentialPrivacy
     }
 }

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -101,32 +101,32 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core
 
         public string AnonymizeJson(string json, AnonymizerSettings settings = null)
         {
-            EnsureArg.IsNotNullOrEmpty(json, nameof(json));
+            EnsureArg.IsNotNullOrWhiteSpace(json, nameof(json));
 
-            var element = ParseJsonToTypedElement(json);
-            var anonymizedElement = AnonymizeElement(element);
-
-            var serializationSettings = new FhirJsonSerializationSettings
+            try
             {
-                Pretty = settings != null && settings.IsPrettyOutput
-            };
+                var element = ParseJsonToTypedElement(json);
+                if (settings != null && settings.ValidateInput)
+                {
+                    ValidateInput(element);
+                }
 
-            return anonymizedElement.ToJson(serializationSettings);
-        }
+                var anonymizedElement = AnonymizeElement(element);
 
-        private void ValidateInput(AnonymizerSettings settings, Resource resource)
-        {
-            if (settings != null && settings.ValidateInput)
-            {
-                _validator.ValidateInput(resource);
+                if (settings != null && settings.ValidateOutput)
+                {
+                    ValidateOutput(anonymizedElement);
+                }
+
+                return anonymizedElement.ToJson();
             }
-        }
-
-        private void ValidateOutput(AnonymizerSettings settings, Resource anonymizedNode)
-        {
-            if (settings != null && settings.ValidateOutput)
+            catch (InvalidInputException)
             {
-                _validator.ValidateOutput(anonymizedNode);
+                throw;
+            }
+            catch (Exception innerException)
+            {
+                throw new AnonymizerOperationException("Anonymize FHIR Json failed", innerException);
             }
         }
 
@@ -140,6 +140,8 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core
             _processors[AnonymizerMethod.Perturb.ToString().ToUpperInvariant()] = new PerturbProcessor();
             _processors[AnonymizerMethod.Keep.ToString().ToUpperInvariant()] = new KeepProcessor();
             _processors[AnonymizerMethod.Generalize.ToString().ToUpperInvariant()] = new GeneralizeProcessor();
+            _processors[AnonymizerMethod.KAnonymity.ToString().ToUpperInvariant()] = new KAnonymityProcessor();
+            _processors[AnonymizerMethod.DifferentialPrivacy.ToString().ToUpperInvariant()] = new DifferentialPrivacyProcessor();
             if (_customProcessorFactory != null)
             {
                 InitializeCustomProcessors(configurationManager);
@@ -177,6 +179,36 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core
             {
                 throw new InvalidInputException("The input FHIR resource is invalid", ex);
             }
+        }
+
+        private void ValidateInput(AnonymizerSettings settings, Resource resource)
+        {
+            if (settings != null && settings.ValidateInput)
+            {
+                ValidateInput(resource.ToTypedElement());
+            }
+        }
+
+        private void ValidateInput(ITypedElement element)
+        {
+            _logger.LogDebug("Validating input resource...");
+
+            _validator.Validate(element);
+        }
+
+        private void ValidateOutput(AnonymizerSettings settings, Resource resource)
+        {
+            if (settings != null && settings.ValidateOutput)
+            {
+                ValidateOutput(resource.ToTypedElement());
+            }
+        }
+
+        private void ValidateOutput(ITypedElement element)
+        {
+            _logger.LogDebug("Validating anonymized resource...");
+
+            _validator.Validate(element);
         }
     }
 }

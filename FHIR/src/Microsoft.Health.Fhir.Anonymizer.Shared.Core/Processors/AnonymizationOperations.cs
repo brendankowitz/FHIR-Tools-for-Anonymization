@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text;
 
@@ -13,5 +13,7 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.Processors
         public const string Encrypt = "ENCRYPT";
         public const string Substitute = "SUBSTITUTE";
         public const string Generalize = "GENERALIZE";
+        public const string KAnonymity = "KANONYMITY";
+        public const string DifferentialPrivacy = "DIFFERENTIALPRIVACY";
     }
 }

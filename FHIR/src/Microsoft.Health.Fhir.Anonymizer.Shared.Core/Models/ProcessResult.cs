@@ -1,99 +1,75 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
+using System.Linq;
 using Hl7.Fhir.ElementModel;
-using Hl7.Fhir.Model;
-using Microsoft.Health.Fhir.Anonymizer.Core.Processors;
 
 namespace Microsoft.Health.Fhir.Anonymizer.Core.Models
 {
     public class ProcessResult
     {
-        public bool IsRedacted
+        private readonly List<ProcessRecord> _processRecords = new List<ProcessRecord>();
+        private readonly Dictionary<string, object> _privacyMetrics = new Dictionary<string, object>();
+        
+        public IReadOnlyCollection<ProcessRecord> ProcessRecords => _processRecords;
+        public IReadOnlyDictionary<string, object> PrivacyMetrics => _privacyMetrics;
+
+        /// <summary>
+        /// Indicates if the resource satisfies k-anonymity
+        /// </summary>
+        public bool IsKAnonymized { get; private set; } = false;
+
+        /// <summary>
+        /// Indicates if the resource has been processed with differential privacy
+        /// </summary>
+        public bool IsDifferentiallyPrivate { get; private set; } = false;
+
+        public void AddProcessRecord(string anonymizationOperation, ElementNode node)
         {
-            get
-            {
-                return ProcessRecords.ContainsKey(AnonymizationOperations.Redact);
-            }
+            _processRecords.Add(new ProcessRecord(anonymizationOperation, node));
         }
 
-        public bool IsAbstracted
+        public void AddPrivacyMetric(string key, object value)
         {
-            get
-            {
-                return ProcessRecords.ContainsKey(AnonymizationOperations.Abstract);
-            }
+            _privacyMetrics[key] = value;
         }
 
-        public bool IsCryptoHashed
+        public void SetKAnonymized(bool value)
         {
-            get
-            {
-                return ProcessRecords.ContainsKey(AnonymizationOperations.CryptoHash);
-            }
+            IsKAnonymized = value;
         }
 
-        public bool IsEncrypted
+        public void SetDifferentiallyPrivate(bool value)
         {
-            get
-            {
-                return ProcessRecords.ContainsKey(AnonymizationOperations.Encrypt);
-            }
+            IsDifferentiallyPrivate = value;
         }
 
-        public bool IsPerturbed 
-        { 
-            get 
-            {
-                return ProcessRecords.ContainsKey(AnonymizationOperations.Perturb);
-            }
-        }
-        public bool IsSubstituted
+        public override string ToString()
         {
-            get
+            var operations = string.Join(", ", _processRecords.Select(r => r.AnonymizationOperation));
+            var privacy = new List<string>();
+            
+            if (IsKAnonymized)
             {
-                return ProcessRecords.ContainsKey(AnonymizationOperations.Substitute);
+                privacy.Add("K-Anonymized");
             }
+            if (IsDifferentiallyPrivate)
+            {
+                privacy.Add("Differentially Private");
+            }
+
+            var privacyStr = privacy.Any() ? $" [{string.Join(", ", privacy)}]" : "";
+            return $"ProcessResult: {_processRecords.Count} operations ({operations}){privacyStr}";
         }
+    }
 
-        public bool IsGeneralized
+    public class ProcessRecord
+    {
+        public string AnonymizationOperation { get; }
+        public ElementNode Node { get; }
+
+        public ProcessRecord(string anonymizationOperation, ElementNode node)
         {
-            get
-            {
-                return ProcessRecords.ContainsKey(AnonymizationOperations.Generalize);
-            }
-        }
-
-        public Dictionary<string, HashSet<ITypedElement>> ProcessRecords { get; } = new Dictionary<string, HashSet<ITypedElement>>();
-
-        public void AddProcessRecord(string operationName, ITypedElement node)
-        {
-            if (ProcessRecords.ContainsKey(operationName))
-            {
-                ProcessRecords[operationName].Add(node);
-            }
-            else
-            {
-                ProcessRecords[operationName] = new HashSet<ITypedElement>() { node };
-            }
-        }
-
-        public void Update(ProcessResult result)
-        {
-            if (result == null)
-            {
-                return;
-            }
-
-            foreach (var pair in result.ProcessRecords)
-            {
-                if (!ProcessRecords.ContainsKey(pair.Key))
-                {
-                    ProcessRecords[pair.Key] = pair.Value;
-                }
-                else
-                {
-                    ProcessRecords[pair.Key].UnionWith(pair.Value);
-                }
-            }
+            AnonymizationOperation = anonymizationOperation;
+            Node = node;
         }
     }
 }
