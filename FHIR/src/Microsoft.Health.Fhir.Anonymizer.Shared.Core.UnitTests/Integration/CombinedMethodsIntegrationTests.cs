@@ -5,6 +5,7 @@ using Microsoft.Health.Fhir.Anonymizer.Core;
 using Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations;
 using Microsoft.Health.Fhir.Anonymizer.Core.Processors.Settings;
 using Microsoft.Health.Fhir.Anonymizer.Core.Validation;
+using Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.Helpers;
 using Newtonsoft.Json.Linq;
 using Xunit;
 
@@ -16,66 +17,19 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.Integration
         public void EndToEnd_KAnonymityAndCryptoHash_ShouldCombineSuccessfully()
         {
             // Arrange: Combine k-anonymity for demographics with cryptoHash for identifiers
-            var config = new AnonymizerConfiguration
-            {
-                PathRules = new Dictionary<string, AnonymizerRule>
-                {
-                    {
-                        "Patient.id",
-                        new AnonymizerRule
-                        {
-                            Path = "Patient.id",
-                            Method = AnonymizerMethod.CryptoHash,
-                            Cases = new List<AnonymizerRule>(),
-                            Parameters = new ParameterConfiguration
-                            {
-                                { "cryptoHashKey", "test-key" }
-                            }
-                        }
-                    },
-                    {
-                        "Patient.address.postalCode",
-                        new AnonymizerRule
-                        {
-                            Path = "Patient.address.postalCode",
-                            Method = AnonymizerMethod.KAnonymity,
-                            Cases = new List<AnonymizerRule>(),
-                            Parameters = new ParameterConfiguration
-                            {
-                                { RuleKeys.KValue, "2" },
-                                { RuleKeys.QuasiIdentifiers, "Patient.address.postalCode,Patient.gender" },
-                                { RuleKeys.GeneralizationStrategy, "prefix" },
-                                { RuleKeys.GeneralizationLevel, "2" }
-                            }
-                        }
-                    },
-                    {
-                        "Patient.gender",
-                        new AnonymizerRule
-                        {
-                            Path = "Patient.gender",
-                            Method = AnonymizerMethod.KAnonymity,
-                            Cases = new List<AnonymizerRule>(),
-                            Parameters = new ParameterConfiguration
-                            {
-                                { RuleKeys.KValue, "2" },
-                                { RuleKeys.QuasiIdentifiers, "Patient.address.postalCode,Patient.gender" },
-                                { RuleKeys.GeneralizationStrategy, "keep" }
-                            }
-                        }
-                    },
-                    {
-                        "Patient.name.family",
-                        new AnonymizerRule
-                        {
-                            Path = "Patient.name.family",
-                            Method = AnonymizerMethod.Redact,
-                            Cases = new List<AnonymizerRule>(),
-                            Parameters = new ParameterConfiguration()
-                        }
-                    }
-                }
-            };
+            var config = new ConfigurationBuilder()
+                .WithCryptoHash("Patient.id", "test-key")
+                .WithKAnonymity("Patient.address.postalCode",
+                    kValue: 2,
+                    quasiIdentifiers: "Patient.address.postalCode,Patient.gender",
+                    generalizationStrategy: "prefix",
+                    generalizationLevel: 2)
+                .WithKAnonymity("Patient.gender",
+                    kValue: 2,
+                    quasiIdentifiers: "Patient.address.postalCode,Patient.gender",
+                    generalizationStrategy: "keep")
+                .WithRedact("Patient.name.family")
+                .Build();
 
             var engine = new AnonymizerEngine(config);
 
@@ -114,41 +68,16 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.Integration
         public void EndToEnd_DifferentialPrivacyAndDateShift_ShouldCombineSuccessfully()
         {
             // Arrange: Combine differential privacy for values with date shifting
-            var config = new AnonymizerConfiguration
-            {
-                PathRules = new Dictionary<string, AnonymizerRule>
-                {
-                    {
-                        "Observation.effectiveDateTime",
-                        new AnonymizerRule
-                        {
-                            Path = "Observation.effectiveDateTime",
-                            Method = AnonymizerMethod.DateShift,
-                            Cases = new List<AnonymizerRule>(),
-                            Parameters = new ParameterConfiguration
-                            {
-                                { "dateShiftKey", "test-key" },
-                                { "dateShiftRange", "100" }
-                            }
-                        }
-                    },
-                    {
-                        "Observation.valueQuantity.value",
-                        new AnonymizerRule
-                        {
-                            Path = "Observation.valueQuantity.value",
-                            Method = AnonymizerMethod.DifferentialPrivacy,
-                            Cases = new List<AnonymizerRule>(),
-                            Parameters = new ParameterConfiguration
-                            {
-                                { RuleKeys.Epsilon, "0.5" },
-                                { RuleKeys.Sensitivity, "10.0" },
-                                { RuleKeys.MechanismType, "laplace" }
-                            }
-                        }
-                    }
-                }
-            };
+            var budgetContext = ConfigurationBuilder.CreateBudgetContext("combined-methods-test", "dp-dateshift");
+            var config = new ConfigurationBuilder()
+                .WithDateShift("Observation.effectiveDateTime", "test-key", dateShiftRange: 100)
+                .WithDifferentialPrivacy("Observation.valueQuantity.value",
+                    epsilon: 0.5,
+                    sensitivity: 10.0,
+                    mechanism: "laplace",
+                    budgetContext: budgetContext,
+                    totalBudget: 1.0)
+                .Build();
 
             var engine = new AnonymizerEngine(config);
             var observationJson = @"{
@@ -174,75 +103,25 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.Integration
             var value = (double)anonymizedObj.SelectToken("valueQuantity.value");
             // Value might differ due to noise (but could be same by chance)
             Assert.InRange(value, 0, 300); // Reasonable range
+            
+            // Cleanup
+            PrivacyBudgetTracker.Instance.ResetBudget(budgetContext);
         }
 
         [Fact]
         public void EndToEnd_AllMethodsCombined_ShouldApplyInCorrectOrder()
         {
             // Arrange: Comprehensive configuration with multiple methods
-            var config = new AnonymizerConfiguration
-            {
-                PathRules = new Dictionary<string, AnonymizerRule>
-                {
-                    // Redact sensitive identifiers
-                    {
-                        "Patient.name.given",
-                        new AnonymizerRule
-                        {
-                            Path = "Patient.name.given",
-                            Method = AnonymizerMethod.Redact,
-                            Cases = new List<AnonymizerRule>(),
-                            Parameters = new ParameterConfiguration()
-                        }
-                    },
-                    // Hash patient ID
-                    {
-                        "Patient.id",
-                        new AnonymizerRule
-                        {
-                            Path = "Patient.id",
-                            Method = AnonymizerMethod.CryptoHash,
-                            Cases = new List<AnonymizerRule>(),
-                            Parameters = new ParameterConfiguration
-                            {
-                                { "cryptoHashKey", "test-key" }
-                            }
-                        }
-                    },
-                    // Shift birth date
-                    {
-                        "Patient.birthDate",
-                        new AnonymizerRule
-                        {
-                            Path = "Patient.birthDate",
-                            Method = AnonymizerMethod.DateShift,
-                            Cases = new List<AnonymizerRule>(),
-                            Parameters = new ParameterConfiguration
-                            {
-                                { "dateShiftKey", "test-key" },
-                                { "dateShiftRange", "50" }
-                            }
-                        }
-                    },
-                    // K-anonymity for postal code
-                    {
-                        "Patient.address.postalCode",
-                        new AnonymizerRule
-                        {
-                            Path = "Patient.address.postalCode",
-                            Method = AnonymizerMethod.KAnonymity,
-                            Cases = new List<AnonymizerRule>(),
-                            Parameters = new ParameterConfiguration
-                            {
-                                { RuleKeys.KValue, "2" },
-                                { RuleKeys.QuasiIdentifiers, "Patient.address.postalCode" },
-                                { RuleKeys.GeneralizationStrategy, "prefix" },
-                                { RuleKeys.GeneralizationLevel, "2" }
-                            }
-                        }
-                    }
-                }
-            };
+            var config = new ConfigurationBuilder()
+                .WithRedact("Patient.name.given")
+                .WithCryptoHash("Patient.id", "test-key")
+                .WithDateShift("Patient.birthDate", "test-key", dateShiftRange: 50)
+                .WithKAnonymity("Patient.address.postalCode",
+                    kValue: 2,
+                    quasiIdentifiers: "Patient.address.postalCode",
+                    generalizationStrategy: "prefix",
+                    generalizationLevel: 2)
+                .Build();
 
             var engine = new AnonymizerEngine(config);
 
@@ -286,43 +165,17 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.Integration
         public void EndToEnd_KAnonymityWithValidation_ShouldVerifyPrivacyProperties()
         {
             // Arrange
-            var config = new AnonymizerConfiguration
-            {
-                PathRules = new Dictionary<string, AnonymizerRule>
-                {
-                    {
-                        "Patient.address.postalCode",
-                        new AnonymizerRule
-                        {
-                            Path = "Patient.address.postalCode",
-                            Method = AnonymizerMethod.KAnonymity,
-                            Cases = new List<AnonymizerRule>(),
-                            Parameters = new ParameterConfiguration
-                            {
-                                { RuleKeys.KValue, "3" },
-                                { RuleKeys.QuasiIdentifiers, "Patient.address.postalCode,Patient.gender" },
-                                { RuleKeys.GeneralizationStrategy, "prefix" },
-                                { RuleKeys.GeneralizationLevel, "2" }
-                            }
-                        }
-                    },
-                    {
-                        "Patient.gender",
-                        new AnonymizerRule
-                        {
-                            Path = "Patient.gender",
-                            Method = AnonymizerMethod.KAnonymity,
-                            Cases = new List<AnonymizerRule>(),
-                            Parameters = new ParameterConfiguration
-                            {
-                                { RuleKeys.KValue, "3" },
-                                { RuleKeys.QuasiIdentifiers, "Patient.address.postalCode,Patient.gender" },
-                                { RuleKeys.GeneralizationStrategy, "keep" }
-                            }
-                        }
-                    }
-                }
-            };
+            var config = new ConfigurationBuilder()
+                .WithKAnonymity("Patient.address.postalCode",
+                    kValue: 3,
+                    quasiIdentifiers: "Patient.address.postalCode,Patient.gender",
+                    generalizationStrategy: "prefix",
+                    generalizationLevel: 2)
+                .WithKAnonymity("Patient.gender",
+                    kValue: 3,
+                    quasiIdentifiers: "Patient.address.postalCode,Patient.gender",
+                    generalizationStrategy: "keep")
+                .Build();
 
             var engine = new AnonymizerEngine(config);
             var validator = new KAnonymityValidator();
@@ -360,35 +213,10 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.Integration
         public void EndToEnd_ComplexResourceWithMultipleMethods_ShouldHandleNesting()
         {
             // Arrange: Complex nested resource
-            var config = new AnonymizerConfiguration
-            {
-                PathRules = new Dictionary<string, AnonymizerRule>
-                {
-                    {
-                        "Patient.identifier.value",
-                        new AnonymizerRule
-                        {
-                            Path = "Patient.identifier.value",
-                            Method = AnonymizerMethod.CryptoHash,
-                            Cases = new List<AnonymizerRule>(),
-                            Parameters = new ParameterConfiguration
-                            {
-                                { "cryptoHashKey", "test-key" }
-                            }
-                        }
-                    },
-                    {
-                        "Patient.contact.name.family",
-                        new AnonymizerRule
-                        {
-                            Path = "Patient.contact.name.family",
-                            Method = AnonymizerMethod.Redact,
-                            Cases = new List<AnonymizerRule>(),
-                            Parameters = new ParameterConfiguration()
-                        }
-                    }
-                }
-            };
+            var config = new ConfigurationBuilder()
+                .WithCryptoHash("Patient.identifier.value", "test-key")
+                .WithRedact("Patient.contact.name.family")
+                .Build();
 
             var engine = new AnonymizerEngine(config);
             var patientJson = @"{

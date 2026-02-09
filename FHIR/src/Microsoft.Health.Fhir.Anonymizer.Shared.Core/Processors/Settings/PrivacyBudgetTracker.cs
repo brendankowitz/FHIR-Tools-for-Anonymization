@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 
 namespace Microsoft.Health.Fhir.Anonymizer.Core.Processors.Settings
@@ -20,9 +21,24 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.Processors.Settings
         private readonly ILogger _logger = AnonymizerLogging.CreateLogger<PrivacyBudgetTracker>();
 
         /// <summary>
+        /// Regex pattern for recommended budget context naming convention.
+        /// Format: dataset-id:operation-id:timestamp or any alphanumeric with hyphens/underscores/colons
+        /// Examples: "patient-cohort-2024:aggregation-001:20240115T103045Z", "file-12345:anonymize:20240115"
+        /// </summary>
+        private static readonly Regex ContextNamingPattern = new Regex(
+            @"^[a-zA-Z0-9][a-zA-Z0-9_:\-]*[a-zA-Z0-9]$",
+            RegexOptions.Compiled);
+
+        /// <summary>
         /// Warning threshold as percentage of total budget (default: 80%)
         /// </summary>
         public double WarningThreshold { get; set; } = 0.8;
+
+        /// <summary>
+        /// When true, enforces strict context naming convention (default: false for backward compatibility)
+        /// Recommended to enable in production for audit clarity
+        /// </summary>
+        public bool EnforceContextNamingConvention { get; set; } = false;
 
         private PrivacyBudgetTracker()
         {
@@ -31,17 +47,70 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.Processors.Settings
         public static PrivacyBudgetTracker Instance => _instance.Value;
 
         /// <summary>
+        /// Validates budget context naming follows security best practices
+        /// SECURITY: Well-structured context names improve audit trails and prevent confusion
+        /// </summary>
+        /// <param name="context">Context identifier to validate</param>
+        /// <param name="throwOnInvalid">If true, throws exception on invalid names</param>
+        /// <returns>True if context name is valid, false otherwise</returns>
+        private bool ValidateContextNaming(string context, bool throwOnInvalid)
+        {
+            if (string.IsNullOrWhiteSpace(context))
+            {
+                if (throwOnInvalid)
+                {
+                    throw new ArgumentException("Budget context cannot be null or empty.");
+                }
+                return false;
+            }
+
+            // Check for dangerous patterns
+            if (context.Contains("../") || context.Contains("..\\"))
+            {
+                var message = $"Budget context '{context}' contains path traversal patterns which are not allowed.";
+                _logger.LogError($"[PRIVACY AUDIT SECURITY] {message}");
+                if (throwOnInvalid)
+                {
+                    throw new System.Security.SecurityException(message);
+                }
+                return false;
+            }
+
+            // Check naming convention
+            if (!ContextNamingPattern.IsMatch(context))
+            {
+                var message = $"Budget context '{context}' does not follow recommended naming convention. " +
+                             "Use format: 'dataset-id:operation-id:timestamp' with alphanumeric characters, hyphens, underscores, and colons.";
+                
+                if (EnforceContextNamingConvention)
+                {
+                    _logger.LogError($"[PRIVACY AUDIT SECURITY] {message}");
+                    if (throwOnInvalid)
+                    {
+                        throw new ArgumentException(message);
+                    }
+                    return false;
+                }
+                else
+                {
+                    _logger.LogWarning($"[PRIVACY AUDIT WARNING] {message}");
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>
         /// Initialize or reset budget for a specific context (e.g., file, session)
         /// SECURITY: Logs initialization with timestamp for audit trail
+        /// SECURITY: Validates context naming to prevent confusion and improve audit clarity
         /// </summary>
-        /// <param name="context">Context identifier (e.g., filename, session ID)</param>
+        /// <param name="context">Context identifier (recommended format: 'dataset-id:operation-id:timestamp')</param>
         /// <param name="totalBudget">Total epsilon budget available</param>
         public void InitializeBudget(string context, double totalBudget)
         {
-            if (string.IsNullOrEmpty(context))
-            {
-                throw new ArgumentException("Budget context cannot be null or empty. Each dataset must have a unique context identifier.");
-            }
+            // SECURITY: Validate context naming
+            ValidateContextNaming(context, throwOnInvalid: true);
 
             if (totalBudget <= 0)
             {
@@ -75,16 +144,15 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.Processors.Settings
         /// Consume epsilon budget for an operation (thread-safe with audit logging)
         /// SECURITY FIX: No longer auto-initializes budget - must be explicitly set via InitializeBudget()
         /// SECURITY AUDIT: All consumption attempts are logged with timestamps and outcomes
+        /// THREAD-SAFETY: Uses lock for atomic check-and-update operations
         /// </summary>
         /// <param name="context">Context identifier</param>
         /// <param name="epsilon">Epsilon value to consume</param>
         /// <returns>True if budget is available, false if budget would be exceeded</returns>
         public bool ConsumeBudget(string context, double epsilon)
         {
-            if (string.IsNullOrEmpty(context))
-            {
-                throw new ArgumentException("Budget context cannot be null or empty.");
-            }
+            // SECURITY: Validate context naming
+            ValidateContextNaming(context, throwOnInvalid: true);
 
             // SECURITY: Require explicit initialization - do NOT auto-initialize with default budget
             if (!_budgetsByContext.ContainsKey(context))
@@ -97,7 +165,7 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.Processors.Settings
             bool success;
             double remainingBefore, remainingAfter;
 
-            // Use lock to ensure atomic check-and-update
+            // THREAD-SAFETY: Use lock to ensure atomic check-and-update
             lock (_lockObject)
             {
                 var currentBudget = _budgetsByContext[context];

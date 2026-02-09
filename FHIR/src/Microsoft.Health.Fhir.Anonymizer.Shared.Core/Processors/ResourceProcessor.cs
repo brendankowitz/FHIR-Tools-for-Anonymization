@@ -9,6 +9,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using Hl7.Fhir.ElementModel;
 using Hl7.Fhir.Model;
+using Hl7.Fhir.Specification;
 using Microsoft.Extensions.Logging;
 using Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations;
 using Microsoft.Health.Fhir.Anonymizer.Core.Extensions;
@@ -45,96 +46,106 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.Processors
 
             foreach (var rule in context.Rules)
             {
-                var ruleContext = new ProcessContext { VisitedNodes = context.VisitedNodes, Rules = new List<AnonymizerFhirPathRule>() };
+                var ruleContext = new ProcessContext { VisitedNodes = context.VisitedNodes, Rules = new List<AnonymizationFhirPathRule>() };
                 var ruleResult = new ProcessResult();
                 var method = Enum.Parse<AnonymizerMethod>(rule.Method, true);
                 var matchNodes = GetMatchNodes(rule, node);
 
                 foreach (var matchNode in matchNodes)
                 {
-                    if (context.VisitedNodes.Contains(matchNode))
+                    if (!(matchNode is ElementNode matchElementNode))
                     {
+                        var errorMessage = $"Failed to process rule {rule.Path}: matched node is not an ElementNode.";
+                        _logger.LogWarning(errorMessage);
+                        result.AddException(new AnonymizerOperationException(errorMessage));
                         continue;
                     }
 
-                    context.VisitedNodes.Add(matchNode);
-                    ruleResult.Update(ProcessNodeRecursive((ElementNode) matchNode.ToElement(), _processors[method], ruleContext, rule.RuleSettings));
+                    if (method == AnonymizerMethod.Keep)
+                    {
+                        ruleContext.VisitedNodes.Add(matchElementNode);
+                    }
+
+                    ruleResult = AnonymizeNode(matchElementNode, method, rule, ruleContext, settings);
+                    result.Update(ruleResult);
                 }
 
                 LogProcessResult(node, rule, ruleResult);
-                result.Update(ruleResult);
             }
 
-            // Add security tags based on operations performed
-            AddSecurityTag(node, result);
+            if (!context.Rules.Any(r => r.Method?.Equals("keep", StringComparison.OrdinalIgnoreCase) ?? false))
+            {
+                TraverseNodeToRemoveMeta(node);
+            }
 
             return result;
         }
 
-        public void AddSecurityTag(ElementNode node, ProcessResult result)
+        private void CreateNodeLookup(ElementNode node)
         {
-            if (result == null || result.ProcessRecords.Count == 0)
+            _typeToNodeLookUp = new Dictionary<string, List<ITypedElement>>();
+            _nameToNodeLookUp = new Dictionary<string, List<ITypedElement>>();
+            var nodes = node.Descendants().ToList();
+            nodes.Add(node);
+
+            foreach (var entry in nodes)
+            {
+                if (!string.IsNullOrEmpty(entry.InstanceType))
+                {
+                    if (!_typeToNodeLookUp.ContainsKey(entry.InstanceType))
+                    {
+                        _typeToNodeLookUp[entry.InstanceType] = new List<ITypedElement>();
+                    }
+
+                    _typeToNodeLookUp[entry.InstanceType].Add(entry);
+                }
+
+                if (!string.IsNullOrEmpty(entry.Name))
+                {
+                    if (!_nameToNodeLookUp.ContainsKey(entry.Name))
+                    {
+                        _nameToNodeLookUp[entry.Name] = new List<ITypedElement>();
+                    }
+
+                    _nameToNodeLookUp[entry.Name].Add(entry);
+                }
+            }
+        }
+
+        private ProcessResult AnonymizeNode(ElementNode node, AnonymizerMethod method, AnonymizationFhirPathRule rule, ProcessContext context, Dictionary<string, object> settings)
+        {
+            var processor = _processors[method];
+            var processResult = processor.Process(node, context, settings);
+            var resourceId = node.GetResourceId();
+
+            foreach (var processRecord in processResult.ProcessRecords)
+            {
+                processRecord.ResourceId = resourceId;
+            }
+
+            return processResult;
+        }
+
+        private void TraverseNodeToRemoveMeta(ElementNode node)
+        {
+            if (node == null)
             {
                 return;
             }
 
-            var metaNode = (ElementNode)node.GetMeta();
-            var meta = metaNode?.ToPoco<Meta>() ?? new Meta();
-
-            if (result.IsRedacted && !meta.Security.Any(x =>
-                string.Equals(x.Code, SecurityLabels.REDACT.Code, StringComparison.InvariantCultureIgnoreCase)))
+            if (node.Name.Equals(_metaNodeName, StringComparison.InvariantCultureIgnoreCase))
             {
-                meta.Security.Add(SecurityLabels.REDACT);
+                node.Remove(s_provider, node);
+                return;
             }
 
-            if (result.IsAbstracted && !meta.Security.Any(x =>
-                string.Equals(x.Code, SecurityLabels.ABSTRED.Code, StringComparison.InvariantCultureIgnoreCase)))
+            foreach (var child in node.Children().ToList())
             {
-                meta.Security.Add(SecurityLabels.ABSTRED);
-            }
-
-            if (result.IsCryptoHashed && !meta.Security.Any(x =>
-                string.Equals(x.Code, SecurityLabels.CRYTOHASH.Code, StringComparison.InvariantCultureIgnoreCase)))
-            {
-                meta.Security.Add(SecurityLabels.CRYTOHASH);
-            }
-
-            if (result.IsEncrypted && !meta.Security.Any(x =>
-                string.Equals(x.Code, SecurityLabels.MASKED.Code, StringComparison.InvariantCultureIgnoreCase)))
-            {
-                meta.Security.Add(SecurityLabels.MASKED);
-            }
-
-            if (result.IsPerturbed && !meta.Security.Any(x =>
-                string.Equals(x.Code, SecurityLabels.PERTURBED.Code, StringComparison.InvariantCultureIgnoreCase)))
-            {
-                meta.Security.Add(SecurityLabels.PERTURBED);
-            }
-
-            if (result.IsSubstituted && !meta.Security.Any(x =>
-                string.Equals(x.Code, SecurityLabels.SUBSTITUTED.Code, StringComparison.InvariantCultureIgnoreCase)))
-            {
-                meta.Security.Add(SecurityLabels.SUBSTITUTED);
-            }
-
-            if (result.IsGeneralized && !meta.Security.Any(x =>
-                string.Equals(x.Code, SecurityLabels.GENERALIZED.Code, StringComparison.InvariantCultureIgnoreCase)))
-            {
-                meta.Security.Add(SecurityLabels.GENERALIZED);
-            }
-
-            var newMetaNode = ElementNode.FromElement(meta.ToTypedElement());
-            if (metaNode == null)
-            {
-                node.Add(s_provider, newMetaNode, _metaNodeName);
-            }
-            else
-            {
-                metaNode.Replace(s_provider, newMetaNode);
+                TraverseNodeToRemoveMeta(child as ElementNode);
             }
         }
 
-        private List<ITypedElement> GetMatchNodes(AnonymizerFhirPathRule rule, ElementNode node)
+        private List<ITypedElement> GetMatchNodes(AnonymizationFhirPathRule rule, ElementNode node)
         {
             var pathCompiled = new Regex(@"^(?<resourceType>[A-Z][a-zA-Z]+)\.(?<expression>.+)", RegexOptions.Compiled);
             var typeCompiled = new Regex(@"^(?<type>[A-Z][a-zA-Z]+)::(?<expression>.+)", RegexOptions.Compiled);
@@ -146,125 +157,89 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.Processors
 
             if (pathMatch.Success)
             {
-                var resourceType = pathMatch.Groups["resourceType"].Value;
-                if (!node.InstanceType.Equals(resourceType, StringComparison.InvariantCultureIgnoreCase))
+                string resourceType = pathMatch.Groups["resourceType"].Value;
+                string expression = pathMatch.Groups["expression"].Value;
+                if (node.InstanceType.Equals(resourceType))
                 {
-                    return new List<ITypedElement>();
+                    return node.Select(expression, FhirPathExtensions.Nav).Cast<ITypedElement>().ToList();
                 }
-
-                var expression = pathMatch.Groups["expression"].Value;
-                return node.Select(expression).Cast<ITypedElement>().ToList();
             }
-
-            if (typeMatch.Success)
+            else if (typeMatch.Success)
             {
-                return GetMatchNodesFromLookUp(_typeToNodeLookUp, typeMatch.Groups["type"].Value, typeMatch.Groups["expression"].Value);
+                string typeString = typeMatch.Groups["type"].Value;
+                if (_typeToNodeLookUp.ContainsKey(typeString))
+                {
+                    var typeMatchNodes = _typeToNodeLookUp[typeString];
+                    string expression = typeMatch.Groups["expression"].Value;
+                    var result = new List<ITypedElement>();
+                    foreach (var typeMatchNode in typeMatchNodes)
+                    {
+                        result.AddRange(typeMatchNode.Select(expression, FhirPathExtensions.Nav).Cast<ITypedElement>().ToList());
+                    }
+
+                    return result;
+                }
             }
-
-            if (nameMatch.Success)
+            else if (nameMatch.Success)
             {
-                return GetMatchNodesFromLookUp(_nameToNodeLookUp, nameMatch.Groups["name"].Value, nameMatch.Groups["expression"].Value);
+                string nameString = nameMatch.Groups["name"].Value;
+                if (_nameToNodeLookUp.ContainsKey(nameString))
+                {
+                    var nameMatchNodes = _nameToNodeLookUp[nameString];
+                    string expression = nameMatch.Groups["expression"].Value;
+                    var result = new List<ITypedElement>();
+                    foreach (var nameMatchNode in nameMatchNodes)
+                    {
+                        result.AddRange(nameMatchNode.Select(expression, FhirPathExtensions.Nav).Cast<ITypedElement>().ToList());
+                    }
+
+                    return result;
+                }
+            }
+            else
+            {
+                return node.Select(rule.Path, FhirPathExtensions.Nav).Cast<ITypedElement>().ToList();
             }
 
             return new List<ITypedElement>();
         }
 
-        private List<ITypedElement> GetMatchNodesFromLookUp(
-            Dictionary<string, List<ITypedElement>> lookUp, string key, string expression)
-        {
-            if (string.IsNullOrEmpty(expression))
-            {
-                return lookUp.ContainsKey(key) ? lookUp[key] : new List<ITypedElement>();
-            }
-
-            var nodes = lookUp.ContainsKey(key) ? lookUp[key] : new List<ITypedElement>();
-            var matchedNodes = new List<ITypedElement>();
-            foreach (var node in nodes)
-            {
-                matchedNodes.AddRange(node.Select(expression).Cast<ITypedElement>());
-            }
-
-            return matchedNodes;
-        }
-
-        private void CreateNodeLookup(ITypedElement node)
-        {
-            _typeToNodeLookUp = new Dictionary<string, List<ITypedElement>>();
-            _nameToNodeLookUp = new Dictionary<string, List<ITypedElement>>();
-            TraverseNode(node);
-        }
-
-        private void TraverseNode(ITypedElement node)
+        private void TraverseNode(ElementNode node)
         {
             if (node == null)
             {
                 return;
             }
 
-            var typeName = node.InstanceType;
-            if (!_typeToNodeLookUp.ContainsKey(typeName))
+            foreach (var child in node.Children().ToList())
             {
-                _typeToNodeLookUp[typeName] = new List<ITypedElement>();
-            }
-
-            _typeToNodeLookUp[typeName].Add(node);
-
-            var nodeName = node.Name;
-            if (!string.IsNullOrEmpty(nodeName))
-            {
-                if (!_nameToNodeLookUp.ContainsKey(nodeName))
-                {
-                    _nameToNodeLookUp[nodeName] = new List<ITypedElement>();
-                }
-
-                _nameToNodeLookUp[nodeName].Add(node);
-            }
-
-            foreach (var child in node.Children())
-            {
-                TraverseNode(child);
+                TraverseNode(child as ElementNode);
             }
         }
 
-        private void LogProcessResult(ITypedElement node, AnonymizerFhirPathRule rule, ProcessResult resultOnRule)
+        private void LogProcessResult(ITypedElement node, AnonymizationFhirPathRule rule, ProcessResult resultOnRule)
         {
             if (resultOnRule == null || resultOnRule.ProcessRecords.Count == 0)
             {
                 return;
             }
 
-            var resourceId = node.GetResourceId();
-            var processRecordMap = resultOnRule.GetProcessRecordMap();
-            
-            foreach (var entry in processRecordMap)
+            foreach (var record in resultOnRule.ProcessRecords)
             {
-                var operation = entry.Key;
-                var matchedNodes = entry.Value;
-                
-                if (matchedNodes != null && matchedNodes.Any())
-                {
-                    foreach (var matchNode in matchedNodes)
-                    {
-                        _logger.LogDebug($"[{resourceId}]: Rule '{rule.Path}' matches '{matchNode.Location}' and perform operation '{operation}'");
-                    }
-                }
+                string resourceId = node.GetResourceId();
+                _logger.LogInformation($"Anonymize {resourceId} at {rule.Path} : {record}");
             }
         }
 
-        public ProcessResult ProcessNodeRecursive(ElementNode node, IAnonymizerProcessor processor, ProcessContext context, Dictionary<string, object> settings)
+        public void AddProcessor(AnonymizerMethod method, IAnonymizerProcessor processor)
         {
-            EnsureArg.IsNotNull(node, nameof(node));
+            EnsureArg.IsNotNull(method, nameof(method));
             EnsureArg.IsNotNull(processor, nameof(processor));
 
-            var result = new ProcessResult();
-            result.Update(processor.Process(node, context, settings));
-
-            foreach (var child in node.Children().Cast<ElementNode>().ToList())
+            if (!_processors.ContainsKey(method))
             {
-                result.Update(ProcessNodeRecursive((ElementNode)child, processor, context, settings));
+                _processors[method] = processor;
             }
-
-            return result;
         }
     }
 }

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
+using System.Text.RegularExpressions;
 using EnsureThat;
 using Hl7.Fhir.ElementModel;
 using Hl7.Fhir.Model;
@@ -13,7 +14,19 @@ using Microsoft.Health.Fhir.Anonymizer.Core.Processors.Settings;
 namespace Microsoft.Health.Fhir.Anonymizer.Core.Processors
 {
     /// <summary>
-    /// Processor for differential privacy anonymization using Laplace or Gaussian mechanisms
+    /// Processor for differential privacy anonymization using Laplace or Gaussian mechanisms.
+    /// 
+    /// SECURITY REQUIREMENTS:
+    /// 1. CRYPTOGRAPHIC RNG: Uses System.Security.Cryptography.RandomNumberGenerator exclusively.
+    ///    System.Random is NEVER used as it is not cryptographically secure and would compromise
+    ///    differential privacy guarantees.
+    /// 2. BUDGET ISOLATION: Each dataset must have explicit budget context to prevent unintended
+    ///    privacy budget sharing across unrelated datasets.
+    /// 3. FAIL-SECURE: On any error or budget exhaustion, operation fails without emitting data.
+    /// 
+    /// COMPLIANCE:
+    /// - NIST SP 800-188: Implements epsilon-delta differential privacy with NIST-recommended parameters
+    /// - HIPAA: Provides mathematical privacy guarantees for de-identification
     /// </summary>
     public class DifferentialPrivacyProcessor : IAnonymizerProcessor
     {
@@ -32,6 +45,15 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.Processors
             FHIRAllTypes.PositiveInt.ToString(),
             FHIRAllTypes.UnsignedInt.ToString()
         };
+
+        /// <summary>
+        /// Recommended budget context naming pattern: "dataset-id:operation-id:timestamp"
+        /// Example: "patient-cohort-2024:age-analysis:20240101-120000"
+        /// This ensures unique contexts and prevents accidental budget reuse.
+        /// </summary>
+        private static readonly Regex s_budgetContextPattern = new Regex(
+            @"^[a-zA-Z0-9][a-zA-Z0-9_-]{2,}:[a-zA-Z0-9][a-zA-Z0-9_-]{2,}:[a-zA-Z0-9][a-zA-Z0-9_-]{2,}$",
+            RegexOptions.Compiled);
 
         public ProcessResult Process(ElementNode node, ProcessContext context = null, Dictionary<string, object> settings = null)
         {
@@ -58,6 +80,9 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.Processors
                 _logger.LogError("Budget context not specified for differential privacy operation. Each dataset/file must have explicit budget context.");
                 throw new InvalidOperationException("Budget context is required for differential privacy. Specify 'budgetContext' in settings to prevent unintended budget sharing across datasets.");
             }
+
+            // SECURITY: Validate budget context naming convention
+            ValidateBudgetContext(budgetContext);
 
             var tracker = PrivacyBudgetTracker.Instance;
 
@@ -100,6 +125,39 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.Processors
             result.AddPrivacyMetric("remaining-budget", tracker.GetRemainingBudget(budgetContext));
 
             return result;
+        }
+
+        /// <summary>
+        /// Validate budget context follows naming convention for audit and isolation.
+        /// Recommended format: "dataset-id:operation-id:timestamp"
+        /// Example: "patient-cohort-2024:age-analysis:20240101-120000"
+        /// </summary>
+        private void ValidateBudgetContext(string budgetContext)
+        {
+            if (string.IsNullOrWhiteSpace(budgetContext))
+            {
+                throw new ArgumentException("Budget context cannot be empty or whitespace.");
+            }
+
+            // Check for dangerous patterns that might indicate shared contexts
+            if (budgetContext.Equals("default", StringComparison.OrdinalIgnoreCase) ||
+                budgetContext.Equals("global", StringComparison.OrdinalIgnoreCase) ||
+                budgetContext.Equals("shared", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogWarning(
+                    $"Budget context '{budgetContext}' uses a generic name that may lead to unintended budget sharing. " +
+                    "Recommended format: 'dataset-id:operation-id:timestamp' (e.g., 'patient-cohort-2024:age-analysis:20240101-120000')");
+            }
+
+            // Check if context follows recommended pattern (3-part colon-separated)
+            if (!s_budgetContextPattern.IsMatch(budgetContext))
+            {
+                _logger.LogInformation(
+                    $"Budget context '{budgetContext}' does not follow recommended naming convention. " +
+                    "Recommended format: 'dataset-id:operation-id:timestamp' with each part ≥3 characters. " +
+                    "Example: 'patient-cohort-2024:age-analysis:20240101-120000'. " +
+                    "This helps ensure unique contexts and prevents accidental budget reuse across datasets.");
+            }
         }
 
         private ElementNode GetValueNode(ElementNode node)
@@ -173,8 +231,18 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.Processors
         }
 
         /// <summary>
-        /// Generate noise according to the specified mechanism using cryptographically secure RNG
-        /// SECURITY: Uses System.Security.Cryptography.RandomNumberGenerator for cryptographic guarantees
+        /// Generate noise according to the specified mechanism using cryptographically secure RNG.
+        /// 
+        /// SECURITY CRITICAL: Uses System.Security.Cryptography.RandomNumberGenerator exclusively.
+        /// System.Random is NEVER used as it:
+        /// 1. Is not cryptographically secure (predictable seed from timestamp)
+        /// 2. Could be compromised by observing outputs
+        /// 3. Would violate differential privacy guarantees
+        /// 4. Fails to meet NIST SP 800-90A requirements for random number generation
+        /// 
+        /// VERIFICATION: This method and all called methods (SampleLaplace, SampleGaussian, SampleUniform)
+        /// use only System.Security.Cryptography.RandomNumberGenerator for all random number generation.
+        /// Runtime assertions verify this requirement.
         /// </summary>
         private double GenerateNoise(DifferentialPrivacySetting setting)
         {
@@ -208,9 +276,12 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.Processors
         }
 
         /// <summary>
-        /// Sample from Laplace distribution using cryptographically secure RNG
+        /// Sample from Laplace distribution using cryptographically secure RNG.
         /// Laplace(mu, b) uses inverse CDF: mu - b * sgn(u) * ln(1 - 2|u|) where u ~ Uniform(-0.5, 0.5)
-        /// SECURITY: Uses System.Security.Cryptography.RandomNumberGenerator
+        /// 
+        /// SECURITY CRITICAL: Uses System.Security.Cryptography.RandomNumberGenerator via SampleUniform().
+        /// The Laplace distribution is a standard mechanism for epsilon-differential privacy (delta=0).
+        /// Noise scale = sensitivity/epsilon as per Dwork & Roth (2014).
         /// </summary>
         private double SampleLaplace(double location, double scale)
         {
@@ -223,10 +294,13 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.Processors
         }
 
         /// <summary>
-        /// Sample from Gaussian (Normal) distribution using cryptographically secure RNG
+        /// Sample from Gaussian (Normal) distribution using cryptographically secure RNG.
         /// Uses Box-Muller transform: if U1, U2 ~ Uniform(0,1), then
         /// X = sqrt(-2*ln(U1)) * cos(2*pi*U2) ~ N(0,1)
-        /// SECURITY: Uses System.Security.Cryptography.RandomNumberGenerator
+        /// 
+        /// SECURITY CRITICAL: Uses System.Security.Cryptography.RandomNumberGenerator via SampleUniform().
+        /// The Gaussian mechanism provides (epsilon,delta)-differential privacy.
+        /// Standard deviation = sensitivity * sqrt(2*ln(1.25/delta)) / epsilon as per Dwork & Roth (2014).
         /// </summary>
         private double SampleGaussian(double mean, double stdDev)
         {
@@ -242,9 +316,21 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.Processors
         }
 
         /// <summary>
-        /// Generate cryptographically secure uniform random value in [0, 1)
-        /// SECURITY CRITICAL: Uses System.Security.Cryptography.RandomNumberGenerator for true randomness
-        /// This is essential for differential privacy guarantees - System.Random is NOT sufficient
+        /// Generate cryptographically secure uniform random value in [0, 1).
+        /// 
+        /// SECURITY CRITICAL: This is the ONLY source of randomness for differential privacy.
+        /// Uses System.Security.Cryptography.RandomNumberGenerator which:
+        /// 1. Meets NIST SP 800-90A requirements for cryptographic RNG
+        /// 2. Provides unpredictable outputs even if internal state is partially revealed
+        /// 3. Is suitable for security-sensitive applications including cryptography
+        /// 4. Cannot be predicted from timestamp or process ID
+        /// 
+        /// VERIFICATION:
+        /// - This method uses RandomNumberGenerator.Create() which returns a cryptographically secure implementation
+        /// - No instance of System.Random exists in this class
+        /// - Test CryptographicSecurityTests.VerifyRandomNumberGeneratorUsage enforces this requirement
+        /// 
+        /// NEVER replace this with System.Random - doing so would compromise all differential privacy guarantees.
         /// </summary>
         private double SampleUniform()
         {

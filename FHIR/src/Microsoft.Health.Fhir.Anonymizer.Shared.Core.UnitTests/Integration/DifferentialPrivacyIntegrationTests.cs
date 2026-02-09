@@ -10,6 +10,7 @@ using Microsoft.Health.Fhir.Anonymizer.Core;
 using Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations;
 using Microsoft.Health.Fhir.Anonymizer.Core.Processors;
 using Microsoft.Health.Fhir.Anonymizer.Core.Processors.Settings;
+using Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.Helpers;
 using Newtonsoft.Json.Linq;
 using Xunit;
 using Xunit.Abstractions;
@@ -33,32 +34,18 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.Integration
         [Fact]
         public void EndToEnd_DifferentialPrivacyOnObservation_ShouldApplyNoise()
         {
-            // Arrange: Create configuration with differential privacy
-            var budgetContext = $"integration-test-{Guid.NewGuid()}";
-            PrivacyBudgetTracker.Instance.InitializeBudget(budgetContext, 10.0);
-
-            var config = new AnonymizerConfiguration
-            {
-                PathRules = new Dictionary<string, AnonymizerRule>
-                {
-                    {
-                        "Observation.valueQuantity.value",
-                        new AnonymizerRule
-                        {
-                            Path = "Observation.valueQuantity.value",
-                            Method = AnonymizerMethod.DifferentialPrivacy,
-                            Cases = new List<AnonymizerRule>(),
-                            Parameters = new ParameterConfiguration
-                            {
-                                { RuleKeys.Epsilon, "1.0" },
-                                { RuleKeys.Sensitivity, "1.0" },
-                                { RuleKeys.Mechanism, "Laplace" },
-                                { RuleKeys.BudgetContext, budgetContext }
-                            }
-                        }
-                    }
-                }
-            };
+            // Arrange: Create configuration with differential privacy using ConfigurationBuilder
+            var budgetContext = ConfigurationBuilder.CreateBudgetContext("integration-test", "observation-noise");
+            
+            var config = ConfigurationBuilder.Create()
+                .InitializeBudget(budgetContext, 10.0)
+                .WithDifferentialPrivacy(
+                    "Observation.valueQuantity.value",
+                    epsilon: 1.0,
+                    sensitivity: 1.0,
+                    mechanism: "Laplace",
+                    budgetContext: budgetContext)
+                .Build();
 
             var engine = new AnonymizerEngine(config);
 
@@ -93,33 +80,19 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.Integration
         public void EndToEnd_MultipleDifferentialPrivacyOperations_ShouldTrackBudget()
         {
             // Arrange: Create configuration that applies DP to multiple fields
-            var budgetContext = $"multi-field-test-{Guid.NewGuid()}";
+            var budgetContext = ConfigurationBuilder.CreateBudgetContext("multi-field-test", "budget-tracking");
             var totalBudget = 5.0;
             var epsilonPerField = 1.0;
-            PrivacyBudgetTracker.Instance.InitializeBudget(budgetContext, totalBudget);
 
-            var config = new AnonymizerConfiguration
-            {
-                PathRules = new Dictionary<string, AnonymizerRule>
-                {
-                    {
-                        "Observation.valueQuantity.value",
-                        new AnonymizerRule
-                        {
-                            Path = "Observation.valueQuantity.value",
-                            Method = AnonymizerMethod.DifferentialPrivacy,
-                            Cases = new List<AnonymizerRule>(),
-                            Parameters = new ParameterConfiguration
-                            {
-                                { RuleKeys.Epsilon, epsilonPerField.ToString() },
-                                { RuleKeys.Sensitivity, "1.0" },
-                                { RuleKeys.Mechanism, "Laplace" },
-                                { RuleKeys.BudgetContext, budgetContext }
-                            }
-                        }
-                    }
-                }
-            };
+            var config = ConfigurationBuilder.Create()
+                .InitializeBudget(budgetContext, totalBudget)
+                .WithDifferentialPrivacy(
+                    "Observation.valueQuantity.value",
+                    epsilon: epsilonPerField,
+                    sensitivity: 1.0,
+                    mechanism: "Laplace",
+                    budgetContext: budgetContext)
+                .Build();
 
             var engine = new AnonymizerEngine(config);
 
@@ -155,37 +128,64 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.Integration
         }
 
         [Fact]
+        public void EndToEnd_TightBudgetScenario_ShouldEnforceBudgetExhaustion()
+        {
+            // Arrange: Tight budget scenario to test budget exhaustion handling
+            var budgetContext = ConfigurationBuilder.CreateBudgetContext("tight-budget", "exhaustion-test");
+            var totalBudget = 1.0;
+            var epsilon = 0.3;
+
+            var config = ConfigurationBuilder.Create()
+                .InitializeBudget(budgetContext, totalBudget)
+                .WithDifferentialPrivacy(
+                    "Observation.valueQuantity.value",
+                    epsilon: epsilon,
+                    sensitivity: 1.0,
+                    mechanism: "Laplace",
+                    budgetContext: budgetContext)
+                .Build();
+
+            var engine = new AnonymizerEngine(config);
+
+            var observationJson = @"{
+                ""resourceType"": ""Observation"",
+                ""valueQuantity"": { ""value"": 100.0 }
+            }";
+
+            // Act: Use up the budget (3 operations: 3 * 0.3 = 0.9)
+            for (int i = 0; i < 3; i++)
+            {
+                engine.AnonymizeJson(observationJson);
+                _output.WriteLine($"Operation {i + 1} consumed {epsilon} epsilon, remaining: {PrivacyBudgetTracker.Instance.GetRemainingBudget(budgetContext)}");
+            }
+
+            // Assert: Should have 0.1 budget remaining
+            var remaining = PrivacyBudgetTracker.Instance.GetRemainingBudget(budgetContext);
+            Assert.InRange(remaining, 0.0, 0.15); // Allow small floating point tolerance
+
+            // Assert: Next operation should fail (needs 0.3, have 0.1)
+            var exception = Assert.Throws<Exception>(() => engine.AnonymizeJson(observationJson));
+            _output.WriteLine($"Budget exhaustion error: {exception.Message}");
+        }
+
+        [Fact]
         public void EndToEnd_DifferentialPrivacyNoiseDistribution_ShouldMatchExpected()
         {
-            // Arrange: Statistical test with many samples
-            var budgetContext = $"statistical-test-{Guid.NewGuid()}";
+            // Arrange: Statistical test with larger samples and tighter tolerances
+            var budgetContext = ConfigurationBuilder.CreateBudgetContext("statistical-test", "noise-distribution");
             var epsilon = 0.5;
             var sensitivity = 1.0;
-            var sampleCount = 150;
-            PrivacyBudgetTracker.Instance.InitializeBudget(budgetContext, sampleCount * epsilon);
+            var sampleCount = 1000; // Increased from 150 to 1000
 
-            var config = new AnonymizerConfiguration
-            {
-                PathRules = new Dictionary<string, AnonymizerRule>
-                {
-                    {
-                        "Observation.valueQuantity.value",
-                        new AnonymizerRule
-                        {
-                            Path = "Observation.valueQuantity.value",
-                            Method = AnonymizerMethod.DifferentialPrivacy,
-                            Cases = new List<AnonymizerRule>(),
-                            Parameters = new ParameterConfiguration
-                            {
-                                { RuleKeys.Epsilon, epsilon.ToString() },
-                                { RuleKeys.Sensitivity, sensitivity.ToString() },
-                                { RuleKeys.Mechanism, "Laplace" },
-                                { RuleKeys.BudgetContext, budgetContext }
-                            }
-                        }
-                    }
-                }
-            };
+            var config = ConfigurationBuilder.Create()
+                .InitializeBudget(budgetContext, sampleCount * epsilon)
+                .WithDifferentialPrivacy(
+                    "Observation.valueQuantity.value",
+                    epsilon: epsilon,
+                    sensitivity: sensitivity,
+                    mechanism: "Laplace",
+                    budgetContext: budgetContext)
+                .Build();
 
             var engine = new AnonymizerEngine(config);
             var originalValue = 100.0m;
@@ -224,48 +224,34 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.Integration
             _output.WriteLine($"Actual: mean={actualMean:F2}, stddev={actualStdDev:F2}");
             _output.WriteLine($"Deviation: mean={(actualMean - expectedMean):F2}, stddev={(actualStdDev - expectedStdDev):F2}");
 
-            // Statistical test: With 150 samples, use 30-35% tolerance for >99% confidence
-            // Standard error of mean: stddev/sqrt(n) = 2.83/sqrt(150) ≈ 0.23
-            // 3 sigma range: ±0.69, so ±2.0 is very conservative
-            Assert.InRange(actualMean, expectedMean - 2.0, expectedMean + 2.0);
+            // Statistical test: With 1000 samples, use tighter 15-20% tolerance for >99.9% confidence
+            // Standard error of mean: stddev/sqrt(n) = 2.83/sqrt(1000) ≈ 0.09
+            // 3 sigma range: ±0.27, so ±1.0 is very conservative
+            Assert.InRange(actualMean, expectedMean - 1.0, expectedMean + 1.0);
             
-            // Variance has higher sampling error, use 35% tolerance
-            Assert.InRange(actualStdDev, expectedStdDev * 0.65, expectedStdDev * 1.35);
+            // Variance has higher sampling error, use 20% tolerance (tightened from 35%)
+            Assert.InRange(actualStdDev, expectedStdDev * 0.80, expectedStdDev * 1.20);
         }
 
         [Fact]
         public void EndToEnd_GaussianMechanism_ShouldProvideEpsilonDeltaPrivacy()
         {
             // Arrange
-            var budgetContext = $"gaussian-integration-test-{Guid.NewGuid()}";
+            var budgetContext = ConfigurationBuilder.CreateBudgetContext("gaussian-integration", "epsilon-delta");
             var epsilon = 1.0;
             var delta = 0.00001;
             var sensitivity = 1.0;
-            PrivacyBudgetTracker.Instance.InitializeBudget(budgetContext, 10.0);
 
-            var config = new AnonymizerConfiguration
-            {
-                PathRules = new Dictionary<string, AnonymizerRule>
-                {
-                    {
-                        "Observation.valueQuantity.value",
-                        new AnonymizerRule
-                        {
-                            Path = "Observation.valueQuantity.value",
-                            Method = AnonymizerMethod.DifferentialPrivacy,
-                            Cases = new List<AnonymizerRule>(),
-                            Parameters = new ParameterConfiguration
-                            {
-                                { RuleKeys.Epsilon, epsilon.ToString() },
-                                { RuleKeys.Sensitivity, sensitivity.ToString() },
-                                { RuleKeys.Mechanism, "Gaussian" },
-                                { RuleKeys.Delta, delta.ToString() },
-                                { RuleKeys.BudgetContext, budgetContext }
-                            }
-                        }
-                    }
-                }
-            };
+            var config = ConfigurationBuilder.Create()
+                .InitializeBudget(budgetContext, 10.0)
+                .WithDifferentialPrivacy(
+                    "Observation.valueQuantity.value",
+                    epsilon: epsilon,
+                    sensitivity: sensitivity,
+                    mechanism: "Gaussian",
+                    budgetContext: budgetContext,
+                    delta: delta)
+                .Build();
 
             var engine = new AnonymizerEngine(config);
 
@@ -299,31 +285,17 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.Integration
         public void EndToEnd_DifferentialPrivacyOnIntegerFields_ShouldRoundResults()
         {
             // Arrange
-            var budgetContext = $"integer-integration-test-{Guid.NewGuid()}";
-            PrivacyBudgetTracker.Instance.InitializeBudget(budgetContext, 10.0);
-
-            var config = new AnonymizerConfiguration
-            {
-                PathRules = new Dictionary<string, AnonymizerRule>
-                {
-                    {
-                        "Patient.multipleBirthInteger",
-                        new AnonymizerRule
-                        {
-                            Path = "Patient.multipleBirthInteger",
-                            Method = AnonymizerMethod.DifferentialPrivacy,
-                            Cases = new List<AnonymizerRule>(),
-                            Parameters = new ParameterConfiguration
-                            {
-                                { RuleKeys.Epsilon, "0.5" },
-                                { RuleKeys.Sensitivity, "1.0" },
-                                { RuleKeys.Mechanism, "Laplace" },
-                                { RuleKeys.BudgetContext, budgetContext }
-                            }
-                        }
-                    }
-                }
-            };
+            var budgetContext = ConfigurationBuilder.CreateBudgetContext("integer-integration", "rounding-test");
+            
+            var config = ConfigurationBuilder.Create()
+                .InitializeBudget(budgetContext, 10.0)
+                .WithDifferentialPrivacy(
+                    "Patient.multipleBirthInteger",
+                    epsilon: 0.5,
+                    sensitivity: 1.0,
+                    mechanism: "Laplace",
+                    budgetContext: budgetContext)
+                .Build();
 
             var engine = new AnonymizerEngine(config);
 
@@ -347,18 +319,32 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.Integration
         public void EndToEnd_EpsilonComparisonTest_HigherEpsilonShouldHaveLessNoise()
         {
             // Arrange: Compare low epsilon (more noise) vs high epsilon (less noise)
-            var lowEpsilonContext = $"low-epsilon-{Guid.NewGuid()}";
-            var highEpsilonContext = $"high-epsilon-{Guid.NewGuid()}";
-            var sampleCount = 100;
+            var lowEpsilonContext = ConfigurationBuilder.CreateBudgetContext("epsilon-comparison", "low-epsilon");
+            var highEpsilonContext = ConfigurationBuilder.CreateBudgetContext("epsilon-comparison", "high-epsilon");
+            var sampleCount = 500; // Increased from 100 for better statistical power
             
-            PrivacyBudgetTracker.Instance.InitializeBudget(lowEpsilonContext, sampleCount * 0.1);
-            PrivacyBudgetTracker.Instance.InitializeBudget(highEpsilonContext, sampleCount * 2.0);
+            var configLow = ConfigurationBuilder.Create()
+                .InitializeBudget(lowEpsilonContext, sampleCount * 0.1)
+                .WithDifferentialPrivacy(
+                    "Observation.valueQuantity.value",
+                    epsilon: 0.1,
+                    sensitivity: 1.0,
+                    mechanism: "Laplace",
+                    budgetContext: lowEpsilonContext)
+                .Build();
 
-            var configLowEpsilon = CreateDPConfig(lowEpsilonContext, 0.1);
-            var configHighEpsilon = CreateDPConfig(highEpsilonContext, 2.0);
+            var configHigh = ConfigurationBuilder.Create()
+                .InitializeBudget(highEpsilonContext, sampleCount * 2.0)
+                .WithDifferentialPrivacy(
+                    "Observation.valueQuantity.value",
+                    epsilon: 2.0,
+                    sensitivity: 1.0,
+                    mechanism: "Laplace",
+                    budgetContext: highEpsilonContext)
+                .Build();
 
-            var engineLow = new AnonymizerEngine(configLowEpsilon);
-            var engineHigh = new AnonymizerEngine(configHighEpsilon);
+            var engineLow = new AnonymizerEngine(configLow);
+            var engineHigh = new AnonymizerEngine(configHigh);
 
             var observationJson = @"{
                 ""resourceType"": ""Observation"",
@@ -384,36 +370,64 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.Integration
 
             _output.WriteLine($"Low epsilon (0.1) variance: {lowVariance:F2}");
             _output.WriteLine($"High epsilon (2.0) variance: {highVariance:F2}");
+            _output.WriteLine($"Variance ratio: {lowVariance / highVariance:F2}");
 
             // Variance ratio should be approximately (epsilon_high/epsilon_low)^2 = 400
             // But with sampling error, just verify low > high with good margin
             Assert.True(lowVariance > highVariance * 5, "Lower epsilon should produce significantly more noise");
         }
 
-        private AnonymizerConfiguration CreateDPConfig(string budgetContext, double epsilon)
+        [Fact]
+        public void EndToEnd_RealisticBudgetScenario_MultipleFieldsAndOperations()
         {
-            return new AnonymizerConfiguration
+            // Arrange: Realistic scenario with multiple fields consuming from shared budget
+            var budgetContext = ConfigurationBuilder.CreateBudgetContext("realistic-scenario", "multi-field-budget");
+            var totalBudget = 3.0;
+
+            var config = ConfigurationBuilder.Create()
+                .InitializeBudget(budgetContext, totalBudget)
+                .WithDifferentialPrivacy(
+                    "Observation.valueQuantity.value",
+                    epsilon: 0.5,
+                    sensitivity: 1.0,
+                    mechanism: "Laplace",
+                    budgetContext: budgetContext)
+                .Build();
+
+            var engine = new AnonymizerEngine(config);
+
+            var observationJson = @"{
+                ""resourceType"": ""Observation"",
+                ""valueQuantity"": { ""value"": 75.5 }
+            }";
+
+            // Act: Process observations until near budget exhaustion
+            int successfulOperations = 0;
+            bool budgetExhausted = false;
+
+            for (int i = 0; i < 10; i++)
             {
-                PathRules = new Dictionary<string, AnonymizerRule>
+                try
                 {
-                    {
-                        "Observation.valueQuantity.value",
-                        new AnonymizerRule
-                        {
-                            Path = "Observation.valueQuantity.value",
-                            Method = AnonymizerMethod.DifferentialPrivacy,
-                            Cases = new List<AnonymizerRule>(),
-                            Parameters = new ParameterConfiguration
-                            {
-                                { RuleKeys.Epsilon, epsilon.ToString() },
-                                { RuleKeys.Sensitivity, "1.0" },
-                                { RuleKeys.Mechanism, "Laplace" },
-                                { RuleKeys.BudgetContext, budgetContext }
-                            }
-                        }
-                    }
+                    engine.AnonymizeJson(observationJson);
+                    successfulOperations++;
+                    var remaining = PrivacyBudgetTracker.Instance.GetRemainingBudget(budgetContext);
+                    _output.WriteLine($"Operation {i + 1}: Success. Remaining budget: {remaining:F2}");
                 }
-            };
+                catch (Exception ex)
+                {
+                    _output.WriteLine($"Operation {i + 1}: Failed - {ex.Message}");
+                    budgetExhausted = true;
+                    break;
+                }
+            }
+
+            // Assert: Should complete exactly 6 operations (6 * 0.5 = 3.0)
+            Assert.Equal(6, successfulOperations);
+            Assert.True(budgetExhausted, "Budget should be exhausted after 6 operations");
+            
+            var finalConsumed = PrivacyBudgetTracker.Instance.GetConsumedBudget(budgetContext);
+            Assert.Equal(totalBudget, finalConsumed);
         }
 
         private double CalculateVariance(List<double> values, double expectedMean)

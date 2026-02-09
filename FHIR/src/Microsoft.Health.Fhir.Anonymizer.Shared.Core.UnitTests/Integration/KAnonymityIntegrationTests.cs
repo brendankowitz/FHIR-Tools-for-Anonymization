@@ -6,6 +6,7 @@ using Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations;
 using Microsoft.Health.Fhir.Anonymizer.Core.Processors;
 using Microsoft.Health.Fhir.Anonymizer.Core.Processors.Settings;
 using Microsoft.Health.Fhir.Anonymizer.Core.Validation;
+using Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.Helpers;
 using Newtonsoft.Json.Linq;
 using Xunit;
 
@@ -16,59 +17,22 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.Integration
         [Fact]
         public void EndToEnd_KAnonymityOnPatientResources_ShouldAnonymizeSuccessfully()
         {
-            // Arrange: Create configuration with k-anonymity
-            var config = new AnonymizerConfiguration
-            {
-                PathRules = new Dictionary<string, AnonymizerRule>
-                {
-                    {
-                        "Patient.address.postalCode",
-                        new AnonymizerRule
-                        {
-                            Path = "Patient.address.postalCode",
-                            Method = AnonymizerMethod.KAnonymity,
-                            Cases = new List<AnonymizerRule>(),
-                            Parameters = new ParameterConfiguration
-                            {
-                                { RuleKeys.KValue, "3" },
-                                { RuleKeys.QuasiIdentifiers, "Patient.address.postalCode,Patient.gender,Patient.birthDate" },
-                                { RuleKeys.GeneralizationStrategy, "prefix" },
-                                { RuleKeys.GeneralizationLevel, "2" }
-                            }
-                        }
-                    },
-                    {
-                        "Patient.gender",
-                        new AnonymizerRule
-                        {
-                            Path = "Patient.gender",
-                            Method = AnonymizerMethod.KAnonymity,
-                            Cases = new List<AnonymizerRule>(),
-                            Parameters = new ParameterConfiguration
-                            {
-                                { RuleKeys.KValue, "3" },
-                                { RuleKeys.QuasiIdentifiers, "Patient.address.postalCode,Patient.gender,Patient.birthDate" },
-                                { RuleKeys.GeneralizationStrategy, "keep" }
-                            }
-                        }
-                    },
-                    {
-                        "Patient.birthDate",
-                        new AnonymizerRule
-                        {
-                            Path = "Patient.birthDate",
-                            Method = AnonymizerMethod.KAnonymity,
-                            Cases = new List<AnonymizerRule>(),
-                            Parameters = new ParameterConfiguration
-                            {
-                                { RuleKeys.KValue, "3" },
-                                { RuleKeys.QuasiIdentifiers, "Patient.address.postalCode,Patient.gender,Patient.birthDate" },
-                                { RuleKeys.GeneralizationStrategy, "year" }
-                            }
-                        }
-                    }
-                }
-            };
+            // Arrange: Create configuration with k-anonymity using ConfigurationBuilder
+            var config = new ConfigurationBuilder()
+                .WithKAnonymity("Patient.address.postalCode", 
+                    kValue: 3,
+                    quasiIdentifiers: "Patient.address.postalCode,Patient.gender,Patient.birthDate",
+                    generalizationStrategy: "prefix",
+                    generalizationLevel: 2)
+                .WithKAnonymity("Patient.gender",
+                    kValue: 3,
+                    quasiIdentifiers: "Patient.address.postalCode,Patient.gender,Patient.birthDate",
+                    generalizationStrategy: "keep")
+                .WithKAnonymity("Patient.birthDate",
+                    kValue: 3,
+                    quasiIdentifiers: "Patient.address.postalCode,Patient.gender,Patient.birthDate",
+                    generalizationStrategy: "year")
+                .Build();
 
             var engine = new AnonymizerEngine(config);
 
@@ -101,43 +65,17 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.Integration
         public void EndToEnd_KAnonymityWithSuppression_ShouldSuppressOutliers()
         {
             // Arrange: Create configuration with k-anonymity and high k-value
-            var config = new AnonymizerConfiguration
-            {
-                PathRules = new Dictionary<string, AnonymizerRule>
-                {
-                    {
-                        "Patient.address.postalCode",
-                        new AnonymizerRule
-                        {
-                            Path = "Patient.address.postalCode",
-                            Method = AnonymizerMethod.KAnonymity,
-                            Cases = new List<AnonymizerRule>(),
-                            Parameters = new ParameterConfiguration
-                            {
-                                { RuleKeys.KValue, "5" },
-                                { RuleKeys.QuasiIdentifiers, "Patient.address.postalCode,Patient.gender" },
-                                { RuleKeys.GeneralizationStrategy, "suppress" },
-                                { RuleKeys.SuppressionThreshold, "0.5" }
-                            }
-                        }
-                    },
-                    {
-                        "Patient.gender",
-                        new AnonymizerRule
-                        {
-                            Path = "Patient.gender",
-                            Method = AnonymizerMethod.KAnonymity,
-                            Cases = new List<AnonymizerRule>(),
-                            Parameters = new ParameterConfiguration
-                            {
-                                { RuleKeys.KValue, "5" },
-                                { RuleKeys.QuasiIdentifiers, "Patient.address.postalCode,Patient.gender" },
-                                { RuleKeys.GeneralizationStrategy, "suppress" }
-                            }
-                        }
-                    }
-                }
-            };
+            var config = new ConfigurationBuilder()
+                .WithKAnonymity("Patient.address.postalCode",
+                    kValue: 5,
+                    quasiIdentifiers: "Patient.address.postalCode,Patient.gender",
+                    generalizationStrategy: "suppress",
+                    suppressionThreshold: 0.5)
+                .WithKAnonymity("Patient.gender",
+                    kValue: 5,
+                    quasiIdentifiers: "Patient.address.postalCode,Patient.gender",
+                    generalizationStrategy: "suppress")
+                .Build();
 
             var engine = new AnonymizerEngine(config);
 
@@ -169,28 +107,13 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.Integration
         public void EndToEnd_KAnonymityWithGeneralization_ShouldGeneralizeData()
         {
             // Arrange: Create configuration with range-based generalization
-            var config = new AnonymizerConfiguration
-            {
-                PathRules = new Dictionary<string, AnonymizerRule>
-                {
-                    {
-                        "Patient.address.postalCode",
-                        new AnonymizerRule
-                        {
-                            Path = "Patient.address.postalCode",
-                            Method = AnonymizerMethod.KAnonymity,
-                            Cases = new List<AnonymizerRule>(),
-                            Parameters = new ParameterConfiguration
-                            {
-                                { RuleKeys.KValue, "2" },
-                                { RuleKeys.QuasiIdentifiers, "Patient.address.postalCode" },
-                                { RuleKeys.GeneralizationStrategy, "prefix" },
-                                { RuleKeys.GeneralizationLevel, "3" }
-                            }
-                        }
-                    }
-                }
-            };
+            var config = new ConfigurationBuilder()
+                .WithKAnonymity("Patient.address.postalCode",
+                    kValue: 2,
+                    quasiIdentifiers: "Patient.address.postalCode",
+                    generalizationStrategy: "prefix",
+                    generalizationLevel: 3)
+                .Build();
 
             var engine = new AnonymizerEngine(config);
 
@@ -221,43 +144,17 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.Integration
         public void EndToEnd_KAnonymityValidation_ShouldReportStatistics()
         {
             // Arrange
-            var config = new AnonymizerConfiguration
-            {
-                PathRules = new Dictionary<string, AnonymizerRule>
-                {
-                    {
-                        "Patient.address.postalCode",
-                        new AnonymizerRule
-                        {
-                            Path = "Patient.address.postalCode",
-                            Method = AnonymizerMethod.KAnonymity,
-                            Cases = new List<AnonymizerRule>(),
-                            Parameters = new ParameterConfiguration
-                            {
-                                { RuleKeys.KValue, "2" },
-                                { RuleKeys.QuasiIdentifiers, "Patient.address.postalCode,Patient.gender" },
-                                { RuleKeys.GeneralizationStrategy, "prefix" },
-                                { RuleKeys.GeneralizationLevel, "2" }
-                            }
-                        }
-                    },
-                    {
-                        "Patient.gender",
-                        new AnonymizerRule
-                        {
-                            Path = "Patient.gender",
-                            Method = AnonymizerMethod.KAnonymity,
-                            Cases = new List<AnonymizerRule>(),
-                            Parameters = new ParameterConfiguration
-                            {
-                                { RuleKeys.KValue, "2" },
-                                { RuleKeys.QuasiIdentifiers, "Patient.address.postalCode,Patient.gender" },
-                                { RuleKeys.GeneralizationStrategy, "keep" }
-                            }
-                        }
-                    }
-                }
-            };
+            var config = new ConfigurationBuilder()
+                .WithKAnonymity("Patient.address.postalCode",
+                    kValue: 2,
+                    quasiIdentifiers: "Patient.address.postalCode,Patient.gender",
+                    generalizationStrategy: "prefix",
+                    generalizationLevel: 2)
+                .WithKAnonymity("Patient.gender",
+                    kValue: 2,
+                    quasiIdentifiers: "Patient.address.postalCode,Patient.gender",
+                    generalizationStrategy: "keep")
+                .Build();
 
             var engine = new AnonymizerEngine(config);
             var validator = new KAnonymityValidator();
@@ -294,28 +191,13 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.Integration
         public void EndToEnd_KAnonymityWithMissingData_ShouldHandleGracefully()
         {
             // Arrange
-            var config = new AnonymizerConfiguration
-            {
-                PathRules = new Dictionary<string, AnonymizerRule>
-                {
-                    {
-                        "Patient.address.postalCode",
-                        new AnonymizerRule
-                        {
-                            Path = "Patient.address.postalCode",
-                            Method = AnonymizerMethod.KAnonymity,
-                            Cases = new List<AnonymizerRule>(),
-                            Parameters = new ParameterConfiguration
-                            {
-                                { RuleKeys.KValue, "2" },
-                                { RuleKeys.QuasiIdentifiers, "Patient.address.postalCode,Patient.gender" },
-                                { RuleKeys.GeneralizationStrategy, "prefix" },
-                                { RuleKeys.GeneralizationLevel, "2" }
-                            }
-                        }
-                    }
-                }
-            };
+            var config = new ConfigurationBuilder()
+                .WithKAnonymity("Patient.address.postalCode",
+                    kValue: 2,
+                    quasiIdentifiers: "Patient.address.postalCode,Patient.gender",
+                    generalizationStrategy: "prefix",
+                    generalizationLevel: 2)
+                .Build();
 
             var engine = new AnonymizerEngine(config);
 

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.Serialization;
+using System.Security;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
 
@@ -10,6 +11,30 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
     public class ParameterConfiguration
     {
         private static readonly ILogger s_logger = AnonymizerLogging.CreateLogger<ParameterConfiguration>();
+
+        /// <summary>
+        /// Dangerous placeholder patterns that must be rejected
+        /// </summary>
+        private static readonly string[] s_dangerousPlaceholderPatterns = new[]
+        {
+            "$HMAC_KEY",
+            "YOUR_KEY_HERE",
+            "YOUR_SECURE_KEY",
+            "YOUR_ENCRYPTION_KEY",
+            "PLACEHOLDER",
+            "CHANGE_ME",
+            "CHANGEME",
+            "REPLACE_ME",
+            "EXAMPLE_KEY",
+            "TEST_KEY",
+            "SAMPLE_KEY",
+            "INSERT_KEY_HERE",
+            "<YOUR_KEY>",
+            "[YOUR_KEY]",
+            "{{YOUR_KEY}}",
+            "TODO",
+            "FIXME"
+        };
 
         [DataMember(Name = "dateShiftKey")]
         public string DateShiftKey { get; set; }
@@ -50,56 +75,18 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
         public string DateShiftKeyPrefix { get; set; }
 
         /// <summary>
-        /// Validate configuration for security issues and placeholder values
-        /// SECURITY: Rejects dangerous placeholder values that should never be used in production
+        /// Validate configuration for security issues and placeholder values.
+        /// 
+        /// SECURITY: Rejects dangerous placeholder values that should never be used in production.
+        /// This prevents accidental use of example/template configurations with insecure dummy keys.
+        /// Throws SecurityException for placeholder keys to ensure fail-secure behavior.
         /// </summary>
         public void Validate()
         {
-            // Check for placeholder HMAC keys
-            if (!string.IsNullOrEmpty(CryptoHashKey) && 
-                (CryptoHashKey.Contains("$HMAC_KEY") || 
-                 CryptoHashKey.Contains("YOUR_KEY_HERE") ||
-                 CryptoHashKey.Contains("PLACEHOLDER") ||
-                 CryptoHashKey.Equals("changeme", StringComparison.OrdinalIgnoreCase)))
-            {
-                throw new InvalidOperationException(
-                    "SECURITY ERROR: Placeholder cryptographic key detected. " +
-                    "The 'cryptoHashKey' contains a placeholder value ('$HMAC_KEY', 'YOUR_KEY_HERE', etc.) " +
-                    "which must be replaced with a cryptographically secure key before use. " +
-                    "\n\nTO GENERATE A SECURE KEY: " +
-                    "\n  openssl rand -base64 32 " +
-                    "\n  or " +
-                    "\n  pwsh -Command \"[Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Minimum 0 -Maximum 256 }))\" " +
-                    "\n\nUsing placeholder keys in production compromises the security of cryptographic " +
-                    "operations and may lead to predictable hash values. Never commit actual keys to " +
-                    "version control - use environment variables or secure key management services.");
-            }
-
-            // Check for placeholder encryption keys
-            if (!string.IsNullOrEmpty(EncryptKey) && 
-                (EncryptKey.Contains("PLACEHOLDER") || 
-                 EncryptKey.Contains("YOUR_KEY_HERE") ||
-                 EncryptKey.Equals("changeme", StringComparison.OrdinalIgnoreCase)))
-            {
-                throw new InvalidOperationException(
-                    "SECURITY ERROR: Placeholder encryption key detected. " +
-                    "The 'encryptKey' contains a placeholder value that must be replaced with a " +
-                    "cryptographically secure key before use. Generate a secure key using: " +
-                    "openssl rand -base64 32");
-            }
-
-            // Check for placeholder date shift keys
-            if (!string.IsNullOrEmpty(DateShiftKey) && 
-                (DateShiftKey.Contains("PLACEHOLDER") || 
-                 DateShiftKey.Contains("YOUR_KEY_HERE") ||
-                 DateShiftKey.Equals("changeme", StringComparison.OrdinalIgnoreCase)))
-            {
-                throw new InvalidOperationException(
-                    "SECURITY ERROR: Placeholder date shift key detected. " +
-                    "The 'dateShiftKey' contains a placeholder value that must be replaced with a " +
-                    "cryptographically secure key before use. Generate a secure key using: " +
-                    "openssl rand -base64 32");
-            }
+            // SECURITY: Check for placeholder cryptographic keys
+            ValidateKeyParameter(CryptoHashKey, "cryptoHashKey", "cryptographic hash");
+            ValidateKeyParameter(EncryptKey, "encryptKey", "encryption");
+            ValidateKeyParameter(DateShiftKey, "dateShiftKey", "date shift");
 
             // Validate differential privacy settings
             if (DifferentialPrivacySettings != null)
@@ -111,6 +98,70 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
             if (KAnonymitySettings != null)
             {
                 ValidateKAnonymitySettings(KAnonymitySettings);
+            }
+        }
+
+        /// <summary>
+        /// Validate a key parameter doesn't contain placeholder values.
+        /// SECURITY CRITICAL: Prevents use of example/template keys in production.
+        /// </summary>
+        private void ValidateKeyParameter(string keyValue, string parameterName, string keyType)
+        {
+            if (string.IsNullOrEmpty(keyValue))
+            {
+                return; // Empty keys are allowed if the feature is not used
+            }
+
+            // Trim and convert to uppercase for case-insensitive comparison
+            var normalizedKey = keyValue.Trim().ToUpperInvariant();
+
+            // Check against all dangerous placeholder patterns
+            foreach (var pattern in s_dangerousPlaceholderPatterns)
+            {
+                if (normalizedKey.Contains(pattern))
+                {
+                    throw new SecurityException(
+                        $"SECURITY ERROR: Placeholder {keyType} key detected in '{parameterName}'.\n\n" +
+                        $"The configuration contains a placeholder value ('{pattern}') that must be replaced " +
+                        "with a cryptographically secure key before use.\n\n" +
+                        "TO GENERATE A SECURE KEY:\n" +
+                        "  Linux/macOS:   openssl rand -base64 32\n" +
+                        "  Windows:       pwsh -Command \"[Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Minimum 0 -Maximum 256 }))\"\n" +
+                        "  .NET:          var key = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));\n\n" +
+                        "SECURITY WARNING: Using placeholder keys in production:\n" +
+                        "  - Compromises cryptographic operations\n" +
+                        "  - May lead to predictable hash values\n" +
+                        "  - Enables re-identification attacks\n" +
+                        "  - Violates privacy guarantees\n\n" +
+                        "BEST PRACTICES:\n" +
+                        "  - Never commit actual keys to version control\n" +
+                        "  - Use environment variables: Environment.GetEnvironmentVariable(\"CRYPTO_KEY\")\n" +
+                        "  - Use Azure Key Vault, AWS Secrets Manager, or similar for production\n" +
+                        "  - Rotate keys periodically according to your security policy\n" +
+                        "  - Use different keys for different environments (dev/staging/production)\n");
+                }
+            }
+
+            // Additional checks for weak or test keys
+            if (keyValue.Length < 16)
+            {
+                s_logger.LogWarning(
+                    $"The {keyType} key in '{parameterName}' is very short ({keyValue.Length} characters). " +
+                    "Recommended minimum is 32 bytes (44 characters in Base64). " +
+                    "Short keys provide inadequate security and may be vulnerable to brute force attacks.");
+            }
+
+            // Check for obviously weak patterns
+            if (keyValue.Equals("12345678", StringComparison.Ordinal) ||
+                keyValue.Equals("password", StringComparison.OrdinalIgnoreCase) ||
+                keyValue.Equals("secret", StringComparison.OrdinalIgnoreCase) ||
+                keyValue.Equals("key", StringComparison.OrdinalIgnoreCase) ||
+                keyValue.All(c => c == keyValue[0])) // All same character
+            {
+                throw new SecurityException(
+                    $"SECURITY ERROR: Weak {keyType} key detected in '{parameterName}'. " +
+                    "The key appears to be a common weak value (e.g., 'password', '12345678', repeated characters). " +
+                    "Generate a cryptographically secure random key using: openssl rand -base64 32");
             }
         }
 
