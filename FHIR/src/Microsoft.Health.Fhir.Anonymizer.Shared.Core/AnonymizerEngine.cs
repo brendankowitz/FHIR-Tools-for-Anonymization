@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Security.Cryptography;
 using EnsureThat;
 using Hl7.Fhir.ElementModel;
 using Hl7.Fhir.Model;
@@ -86,17 +87,65 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core
 
                 throw;
             }
+            catch (CryptographicException cryptoEx)
+            {
+                // SECURITY: Allow cryptographic exceptions to propagate with original type
+                // These indicate serious security failures that must not be masked
+                _logger.LogError(cryptoEx, 
+                    "[SECURITY] Cryptographic operation failed during anonymization. " +
+                    "This may indicate corrupted keys, tampering, or implementation errors.");
+                throw;
+            }
+            catch (InvalidOperationException invalidOpEx) when (invalidOpEx.Message.Contains("budget"))
+            {
+                // SECURITY: Allow privacy budget violations to propagate with specific type
+                // Masking these could lead to privacy breaches
+                _logger.LogError(invalidOpEx,
+                    "[SECURITY] Privacy budget violation during anonymization. " +
+                    "Operation denied to prevent epsilon exhaustion.");
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // Log all other exceptions but allow them to propagate
+                _logger.LogError(ex, "Exception occurred during element anonymization");
+                throw;
+            }
         }
 
         public Resource AnonymizeResource(Resource resource, AnonymizerSettings settings = null)
         {
             EnsureArg.IsNotNull(resource, nameof(resource));
 
-            ValidateInput(settings, resource);
-            var anonymizedResource = AnonymizeElement(resource.ToTypedElement()).ToPoco<Resource>();
-            ValidateOutput(settings, anonymizedResource);
-           
-            return anonymizedResource;
+            try
+            {
+                ValidateInput(settings, resource);
+                var anonymizedResource = AnonymizeElement(resource.ToTypedElement()).ToPoco<Resource>();
+                ValidateOutput(settings, anonymizedResource);
+               
+                return anonymizedResource;
+            }
+            catch (CryptographicException)
+            {
+                // SECURITY: Allow cryptographic exceptions to propagate unchanged
+                throw;
+            }
+            catch (InvalidOperationException invalidOpEx) when (invalidOpEx.Message.Contains("budget"))
+            {
+                // SECURITY: Allow privacy budget violations to propagate unchanged
+                throw;
+            }
+            catch (AnonymizerProcessingException)
+            {
+                // Application-specific exceptions can be re-thrown as-is
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // Wrap other exceptions for context but preserve inner exception
+                _logger.LogError(ex, "Exception occurred during resource anonymization");
+                throw new AnonymizerOperationException("Failed to anonymize FHIR resource", ex);
+            }
         }
 
         public string AnonymizeJson(string json, AnonymizerSettings settings = null)
@@ -122,10 +171,30 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core
             }
             catch (InvalidInputException)
             {
+                // Input validation exceptions should propagate unchanged
                 throw;
+            }
+            catch (CryptographicException cryptoEx)
+            {
+                // SECURITY: Preserve cryptographic exception type
+                _logger.LogError(cryptoEx, "[SECURITY] Cryptographic failure during JSON anonymization");
+                throw;
+            }
+            catch (InvalidOperationException invalidOpEx) when (invalidOpEx.Message.Contains("budget"))
+            {
+                // SECURITY: Preserve privacy budget exception type
+                _logger.LogError(invalidOpEx, "[SECURITY] Privacy budget violation during JSON anonymization");
+                throw;
+            }
+            catch (AnonymizerProcessingException processingEx)
+            {
+                // Application exceptions can be wrapped with more context
+                _logger.LogError(processingEx, "Processing error during JSON anonymization");
+                throw new AnonymizerOperationException("Anonymize FHIR Json failed", processingEx);
             }
             catch (Exception innerException)
             {
+                _logger.LogError(innerException, "Unexpected exception during JSON anonymization");
                 throw new AnonymizerOperationException("Anonymize FHIR Json failed", innerException);
             }
         }
