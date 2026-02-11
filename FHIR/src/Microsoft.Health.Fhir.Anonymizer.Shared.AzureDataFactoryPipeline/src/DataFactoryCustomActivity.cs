@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -192,7 +192,6 @@ namespace Microsoft.Health.Fhir.Anonymizer.DataFactoryTool
         {
             var processedCount = 0;
             int skippedCount = 0;
-            var consumedCount = 0;
 
             using FhirBlobDataStream inputStream = new FhirBlobDataStream(inputBlobClient);
             FhirStreamReader reader = new FhirStreamReader(inputStream);
@@ -220,9 +219,8 @@ namespace Microsoft.Health.Fhir.Anonymizer.DataFactoryTool
             {
                 Interlocked.Add(ref processedCount, args.ProcessCompleted);
                 Interlocked.Add(ref skippedCount, args.ProcessSkipped);
-                Interlocked.Add(ref consumedCount, args.ConsumeCompleted);
 
-                Console.WriteLine($"[{stopWatch.Elapsed.ToString()}][tid:{args.CurrentThreadId}]: {processedCount} Completed. {skippedCount} Skipped. {consumedCount} consume completed.");
+                Console.WriteLine($"[{stopWatch.Elapsed.ToString()}][tid:{args.CurrentThreadId}]: {processedCount} Completed. {skippedCount} Skipped.");
             };
 
             await executor.ExecuteAsync(CancellationToken.None, progress).ConfigureAwait(false);

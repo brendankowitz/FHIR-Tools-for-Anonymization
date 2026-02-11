@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -137,8 +137,7 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core
 
                 if (AnonymizedDataConsumer != null)
                 {
-                    int consumeCount = await AnonymizedDataConsumer.ConsumeAsync(resultContents).ConfigureAwait(false);
-                    progress?.Report(new BatchAnonymizeProgressDetail() { ConsumeCompleted = consumeCount, CurrentThreadId = Thread.CurrentThread.ManagedThreadId });
+                    await AnonymizedDataConsumer.ConsumeAsync(resultContents).ConfigureAwait(false);
                 }
             }
             else
@@ -154,8 +153,7 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core
 
                         if (AnonymizedDataConsumer != null)
                         {
-                            int consumeCount = await AnonymizedDataConsumer.ConsumeAsync(resultContents).ConfigureAwait(false);
-                            progress?.Report(new BatchAnonymizeProgressDetail() { ConsumeCompleted = consumeCount, CurrentThreadId = Thread.CurrentThread.ManagedThreadId });
+                            await AnonymizedDataConsumer.ConsumeAsync(resultContents).ConfigureAwait(false);
                         }
                         
                         break; // Only consume 1 result from completed task

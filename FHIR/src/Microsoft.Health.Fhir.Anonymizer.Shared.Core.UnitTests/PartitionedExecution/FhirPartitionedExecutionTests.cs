@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading;
@@ -22,12 +22,10 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.PartitionedExecution
             };
 
             int totalCount = 0;
-            int consumeCount = 0;
             Progress<BatchAnonymizeProgressDetail> progress = new Progress<BatchAnonymizeProgressDetail>();
             progress.ProgressChanged += (obj, args) =>
             {
                 Interlocked.Add(ref totalCount, args.ProcessCompleted);
-                Interlocked.Add(ref consumeCount, args.ConsumeCompleted);
             };
             await executor.ExecuteAsync(CancellationToken.None, progress: progress);
 
@@ -38,7 +36,6 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.PartitionedExecution
             await Task.Delay(TimeSpan.FromSeconds(1));
 
             Assert.Equal(itemCount, totalCount);
-            Assert.Equal(itemCount, consumeCount);
         }
 
         [Fact]
@@ -68,12 +65,10 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.PartitionedExecution
             };
 
             int totalCount = 0;
-            int consumeCount = 0;
             Progress<BatchAnonymizeProgressDetail> progress = new Progress<BatchAnonymizeProgressDetail>();
             progress.ProgressChanged += (obj, args) =>
             {
                 Interlocked.Add(ref totalCount, args.ProcessCompleted);
-                Interlocked.Add(ref consumeCount, args.ConsumeCompleted);
             };
             await executor.ExecuteAsync(CancellationToken.None, progress: progress);
 
@@ -84,7 +79,6 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.PartitionedExecution
             await Task.Delay(TimeSpan.FromSeconds(1));
 
             Assert.Equal(itemCount, totalCount);
-            Assert.Equal(itemCount, consumeCount);
         }
 
         [Fact]
