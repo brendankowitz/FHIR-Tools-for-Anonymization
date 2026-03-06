@@ -60,7 +60,7 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           copilot-token: ${{ secrets.COPILOT_GITHUB_TOKEN }}
-          model: claude-sonnet-4.5
+          model: claude-sonnet-4.6
           output-type: issue
           focus-areas: 'dependencies,security,technical-debt,industry-research,issue-review,ci-health'
           create-actionable-issues: 'true'

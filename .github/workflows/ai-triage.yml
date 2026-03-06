@@ -76,7 +76,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           copilot-token: ${{ secrets.COPILOT_GITHUB_TOKEN }}
           issue-number: ${{ github.event.inputs.issue_number || '' }}
-          model: claude-sonnet-4.5
+          model: claude-sonnet-4.6
           enable-duplicate-detection: 'true'
           enable-auto-label: 'true'
           allow-external-ai-contributors: 'true'

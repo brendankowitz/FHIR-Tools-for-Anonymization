@@ -93,7 +93,7 @@ jobs:
           app-token: ${{ steps.app-token.outputs.token }}
           issue-number: ${{ github.event.inputs.issue_number || github.event.issue.number || '' }}
           pr-number: ${{ github.event.inputs.pr_number || github.event.pull_request.number || '' }}
-          model: 'claude-sonnet-4.5'
+          model: 'claude-sonnet-4.6'
           max-iterations: '5'
           dry-run: 'false'
 

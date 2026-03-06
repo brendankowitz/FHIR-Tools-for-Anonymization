@@ -70,7 +70,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           copilot-token: ${{ secrets.COPILOT_GITHUB_TOKEN }}
           pr-number: ${{ github.event.inputs.pr_number || '' }}
-          model: claude-sonnet-4.5
+          model: claude-sonnet-4.6
           auto-approve-dependabot: 'true'
           # Healthcare data anonymization requires strict security review
           security-focus: 'true'
