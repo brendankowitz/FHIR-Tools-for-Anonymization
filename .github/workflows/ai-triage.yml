@@ -79,6 +79,7 @@ jobs:
           model: claude-sonnet-4.5
           enable-duplicate-detection: 'true'
           enable-auto-label: 'true'
+          allow-external-ai-contributors: 'true'
 
       - name: Trigger Coding Agent
         if: steps.triage.outputs.recommended-action == 'assign-to-agent'
