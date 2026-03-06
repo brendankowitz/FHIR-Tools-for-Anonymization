@@ -1,0 +1,18 @@
+// This file has been refactored and split into multiple focused test classes.
+// Please refer to the following files instead:
+//
+// - AnonymizationVisitorTestBase.cs (shared base class and helpers)
+// - AnonymizationVisitor.RedactionTests.cs (redaction tests)
+// - AnonymizationVisitor.DateShiftTests.cs (date shifting tests)
+// - AnonymizationVisitor.CryptoHashTests.cs (cryptographic hashing tests)
+// - AnonymizationVisitor.EncryptTests.cs (encryption tests)
+// - AnonymizationVisitor.SubstituteTests.cs (substitution tests)
+// - AnonymizationVisitor.PrimitiveTypeTests.cs (primitive FHIR type tests)
+// - AnonymizationVisitor.ComplexTypeTests.cs (complex FHIR type tests)
+//
+// This refactoring was completed to improve maintainability and test organization
+// by grouping tests by visitor behavior patterns and FHIR data types.
+//
+// Migration completed: 2026-03-06
+// Original file had 688 lines
+// Tests redistributed across 8 focused classes
