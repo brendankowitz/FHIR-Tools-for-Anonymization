@@ -68,6 +68,24 @@ jobs:
           issue-number: ${{ github.event.inputs.issue_number || '' }}
           mode: ${{ github.event.inputs.mode || 'scheduled' }}
 
+      - name: Trigger Triage for New Issues
+        if: steps.research.outputs.issue-numbers != ''
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const issueNumbers = '${{ steps.research.outputs.issue-numbers }}'.split(',').filter(n => n.trim());
+            for (const issueNumber of issueNumbers) {
+              await github.rest.actions.createWorkflowDispatch({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: 'ai-triage.yml',
+                ref: 'master',
+                inputs: { issue_number: issueNumber.trim() }
+              });
+              core.info(`Triggered triage for issue #${issueNumber}`);
+            }
+
       - name: Trigger Coding Agent
         if: steps.research.outputs.recommended-action == 'assign-to-agent' && github.event.inputs.mode == 'issue-focused'
         uses: actions/github-script@v7
