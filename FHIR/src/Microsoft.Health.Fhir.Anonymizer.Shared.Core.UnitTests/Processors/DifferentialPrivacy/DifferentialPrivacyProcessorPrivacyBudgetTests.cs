@@ -1,177 +1,149 @@
 using System;
+using System.Collections.Generic;
+using Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations;
 using Microsoft.Health.Fhir.Anonymizer.Core.Processors;
 using Xunit;
 
 namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.Processors.DifferentialPrivacy
 {
-    /// <summary>
-    /// Tests for DifferentialPrivacyProcessor privacy budget tracking and management.
-    /// Covers budget allocation, depletion, and enforcement.
-    /// </summary>
-    public class DifferentialPrivacyProcessorPrivacyBudgetTests : DifferentialPrivacyProcessorTestBase
+    public class DifferentialPrivacyProcessorPrivacyBudgetTests : DifferentialPrivacyProcessorTestBase, IDisposable
     {
+        private const int FixedSeed = 98765;
+
+        public DifferentialPrivacyProcessorPrivacyBudgetTests()
+        {
+            // Reset the singleton tracker before each test
+            PrivacyBudgetTracker.Instance.Reset();
+        }
+
+        public void Dispose()
+        {
+            // Clean up after each test
+            PrivacyBudgetTracker.Instance.Reset();
+        }
+
         [Fact]
-        public void Constructor_WithPrivacyBudget_ShouldInitializeBudget()
+        public void Process_TracksEpsilonConsumption()
         {
             // Arrange
-            var budget = 10.0;
-            var config = CreateConfigWithBudget(budget);
+            var processor = CreateProcessor();
+            var node = CreateNode(100.0);
+            var settings = CreateSettings(epsilon: 1.0, sensitivity: 1.0, mechanism: "laplace", seed: FixedSeed);
+            var initialBudget = PrivacyBudgetTracker.Instance.GetRemainingBudget();
 
             // Act
-            var processor = new DifferentialPrivacyProcessor(config);
+            processor.Process(node, settings);
 
             // Assert
-            Assert.Equal(budget, processor.RemainingBudget);
+            var remainingBudget = PrivacyBudgetTracker.Instance.GetRemainingBudget();
+            Assert.True(remainingBudget < initialBudget, "Privacy budget should be consumed");
         }
 
         [Fact]
-        public void AddNoise_WithBudget_ShouldDecrementBudget()
+        public void Process_MultipleCalls_AccumulatesBudgetConsumption()
         {
             // Arrange
-            var budget = 10.0;
-            var epsilon = 1.0;
-            var config = CreateConfigWithBudget(budget);
-            config["epsilon"] = epsilon;
-            var processor = new DifferentialPrivacyProcessor(config);
-            var initialBudget = processor.RemainingBudget;
+            var processor = CreateProcessor();
+            var epsilon = 0.5;
+            var settings = CreateSettings(epsilon: epsilon, sensitivity: 1.0, mechanism: "laplace", seed: FixedSeed);
+            var initialBudget = PrivacyBudgetTracker.Instance.GetRemainingBudget();
 
             // Act
-            processor.AddNoise(100.0);
+            processor.Process(CreateNode(100.0), settings);
+            var budgetAfterFirst = PrivacyBudgetTracker.Instance.GetRemainingBudget();
+            
+            processor.Process(CreateNode(200.0), settings);
+            var budgetAfterSecond = PrivacyBudgetTracker.Instance.GetRemainingBudget();
 
             // Assert
-            Assert.True(processor.RemainingBudget < initialBudget,
-                "Budget should be decremented after adding noise");
-            AssertApproximatelyEqual(budget - epsilon, processor.RemainingBudget, 0.001);
+            Assert.True(budgetAfterFirst < initialBudget, "Budget consumed after first call");
+            Assert.True(budgetAfterSecond < budgetAfterFirst, "Budget consumed after second call");
+            Assert.Equal(initialBudget - (2 * epsilon), budgetAfterSecond, 6);
         }
 
         [Fact]
-        public void AddNoise_WhenBudgetExhausted_ShouldThrowInvalidOperationException()
+        public void Process_WithDifferentEpsilonValues_TracksSeparately()
         {
             // Arrange
-            var budget = 1.0;
-            var epsilon = 1.0;
-            var config = CreateConfigWithBudget(budget);
-            config["epsilon"] = epsilon;
-            var processor = new DifferentialPrivacyProcessor(config);
-
-            // Act - Exhaust the budget
-            processor.AddNoise(100.0);
-
-            // Assert - Should throw on second call
-            Assert.Throws<InvalidOperationException>(() => processor.AddNoise(100.0));
-        }
-
-        [Fact]
-        public void AddNoise_WithInsufficientBudget_ShouldThrowInvalidOperationException()
-        {
-            // Arrange
-            var budget = 0.5;
-            var epsilon = 1.0;
-            var config = CreateConfigWithBudget(budget);
-            config["epsilon"] = epsilon;
-            var processor = new DifferentialPrivacyProcessor(config);
-
-            // Act & Assert
-            Assert.Throws<InvalidOperationException>(() => processor.AddNoise(100.0));
-        }
-
-        [Fact]
-        public void AddNoiseToArray_WithBudget_ShouldDecrementBudgetForEachElement()
-        {
-            // Arrange
-            var budget = 10.0;
-            var epsilon = 1.0;
-            var config = CreateConfigWithBudget(budget);
-            config["epsilon"] = epsilon;
-            var processor = new DifferentialPrivacyProcessor(config);
-            var values = CreateSequentialTestData(3);
+            var processor = CreateProcessor();
+            var epsilon1 = 0.5;
+            var epsilon2 = 1.0;
+            var settings1 = CreateSettings(epsilon: epsilon1, sensitivity: 1.0, mechanism: "laplace", seed: FixedSeed);
+            var settings2 = CreateSettings(epsilon: epsilon2, sensitivity: 1.0, mechanism: "laplace", seed: FixedSeed);
+            var initialBudget = PrivacyBudgetTracker.Instance.GetRemainingBudget();
 
             // Act
-            processor.AddNoiseToArray(values);
-
-            // Assert - Budget should be decremented by epsilon * count
-            AssertApproximatelyEqual(budget - (epsilon * 3), processor.RemainingBudget, 0.001);
-        }
-
-        [Fact]
-        public void AddNoiseToArray_WhenBudgetInsufficientForAll_ShouldThrowInvalidOperationException()
-        {
-            // Arrange
-            var budget = 2.0;
-            var epsilon = 1.0;
-            var config = CreateConfigWithBudget(budget);
-            config["epsilon"] = epsilon;
-            var processor = new DifferentialPrivacyProcessor(config);
-            var values = CreateSequentialTestData(3); // Needs 3.0 budget
-
-            // Act & Assert
-            Assert.Throws<InvalidOperationException>(() => processor.AddNoiseToArray(values));
-        }
-
-        [Fact]
-        public void RemainingBudget_WithoutBudgetSet_ShouldReturnInfinity()
-        {
-            // Arrange
-            var config = CreateDefaultConfig();
-            var processor = new DifferentialPrivacyProcessor(config);
-
-            // Act & Assert
-            Assert.Equal(double.PositiveInfinity, processor.RemainingBudget);
-        }
-
-        [Fact]
-        public void RemainingBudget_AfterMultipleOperations_ShouldTrackCorrectly()
-        {
-            // Arrange
-            var budget = 10.0;
-            var epsilon = 1.0;
-            var config = CreateConfigWithBudget(budget);
-            config["epsilon"] = epsilon;
-            var processor = new DifferentialPrivacyProcessor(config);
-
-            // Act
-            processor.AddNoise(100.0); // -1.0
-            processor.AddNoise(100.0); // -1.0
-            processor.AddNoiseToArray(CreateSequentialTestData(2)); // -2.0
+            processor.Process(CreateNode(100.0), settings1);
+            processor.Process(CreateNode(200.0), settings2);
 
             // Assert
-            AssertApproximatelyEqual(6.0, processor.RemainingBudget, 0.001);
+            var remainingBudget = PrivacyBudgetTracker.Instance.GetRemainingBudget();
+            Assert.Equal(initialBudget - epsilon1 - epsilon2, remainingBudget, 6);
         }
 
         [Fact]
-        public void Constructor_WithZeroBudget_ShouldThrowArgumentException()
+        public void GetRemainingBudget_ReturnsCorrectValue()
         {
             // Arrange
-            var config = CreateConfigWithBudget(0.0);
-
-            // Act & Assert
-            Assert.Throws<ArgumentException>(() => new DifferentialPrivacyProcessor(config));
-        }
-
-        [Fact]
-        public void Constructor_WithNegativeBudget_ShouldThrowArgumentException()
-        {
-            // Arrange
-            var config = CreateConfigWithBudget(-1.0);
-
-            // Act & Assert
-            Assert.Throws<ArgumentException>(() => new DifferentialPrivacyProcessor(config));
-        }
-
-        [Fact]
-        public void ResetBudget_ShouldRestoreBudgetToInitialValue()
-        {
-            // Arrange
-            var budget = 10.0;
-            var config = CreateConfigWithBudget(budget);
-            var processor = new DifferentialPrivacyProcessor(config);
-            processor.AddNoise(100.0); // Use some budget
+            var processor = CreateProcessor();
+            var epsilon = 2.0;
+            var settings = CreateSettings(epsilon: epsilon, sensitivity: 1.0, mechanism: "laplace", seed: FixedSeed);
+            var initialBudget = PrivacyBudgetTracker.Instance.GetRemainingBudget();
 
             // Act
-            processor.ResetBudget();
+            processor.Process(CreateNode(100.0), settings);
 
             // Assert
-            Assert.Equal(budget, processor.RemainingBudget);
+            var remainingBudget = PrivacyBudgetTracker.Instance.GetRemainingBudget();
+            Assert.Equal(initialBudget - epsilon, remainingBudget, 6);
+        }
+
+        [Fact]
+        public void GetTotalConsumed_ReturnsAccumulatedConsumption()
+        {
+            // Arrange
+            var processor = CreateProcessor();
+            var epsilon = 0.5;
+            var settings = CreateSettings(epsilon: epsilon, sensitivity: 1.0, mechanism: "laplace", seed: FixedSeed);
+
+            // Act
+            processor.Process(CreateNode(100.0), settings);
+            processor.Process(CreateNode(200.0), settings);
+            processor.Process(CreateNode(300.0), settings);
+
+            // Assert
+            var totalConsumed = PrivacyBudgetTracker.Instance.GetTotalConsumed();
+            Assert.Equal(3 * epsilon, totalConsumed, 6);
+        }
+
+        [Fact]
+        public void Reset_RestoresBudget()
+        {
+            // Arrange
+            var processor = CreateProcessor();
+            var settings = CreateSettings(epsilon: 1.0, sensitivity: 1.0, mechanism: "laplace", seed: FixedSeed);
+            var initialBudget = PrivacyBudgetTracker.Instance.GetRemainingBudget();
+            
+            processor.Process(CreateNode(100.0), settings);
+            Assert.True(PrivacyBudgetTracker.Instance.GetRemainingBudget() < initialBudget, "Budget should be consumed");
+
+            // Act
+            PrivacyBudgetTracker.Instance.Reset();
+
+            // Assert
+            var resetBudget = PrivacyBudgetTracker.Instance.GetRemainingBudget();
+            Assert.Equal(initialBudget, resetBudget, 6);
+        }
+
+        [Fact]
+        public void Singleton_ReturnsSameInstance()
+        {
+            // Arrange & Act
+            var instance1 = PrivacyBudgetTracker.Instance;
+            var instance2 = PrivacyBudgetTracker.Instance;
+
+            // Assert
+            Assert.Same(instance1, instance2);
         }
     }
 }

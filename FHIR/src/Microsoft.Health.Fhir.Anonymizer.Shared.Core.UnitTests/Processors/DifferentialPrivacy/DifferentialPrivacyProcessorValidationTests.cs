@@ -1,195 +1,161 @@
 using System;
 using System.Collections.Generic;
-using Microsoft.Health.Fhir.Anonymizer.Core.Processors;
+using Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations;
 using Xunit;
 
 namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.Processors.DifferentialPrivacy
 {
-    /// <summary>
-    /// Tests for DifferentialPrivacyProcessor input validation and boundary conditions.
-    /// Covers parameter validation, edge cases, and error handling.
-    /// </summary>
     public class DifferentialPrivacyProcessorValidationTests : DifferentialPrivacyProcessorTestBase
     {
         [Fact]
-        public void AddNoise_WithNaN_ShouldThrowArgumentException()
+        public void Process_WithNullNode_ThrowsArgumentNullException()
         {
             // Arrange
-            var config = CreateDefaultConfig();
-            var processor = new DifferentialPrivacyProcessor(config);
+            var processor = CreateProcessor();
+            var settings = CreateSettings();
 
             // Act & Assert
-            Assert.Throws<ArgumentException>(() => processor.AddNoise(double.NaN));
+            Assert.Throws<ArgumentNullException>(() => processor.Process(null, settings));
         }
 
         [Fact]
-        public void AddNoise_WithPositiveInfinity_ShouldThrowArgumentException()
+        public void Process_WithNullSettings_ThrowsArgumentNullException()
         {
             // Arrange
-            var config = CreateDefaultConfig();
-            var processor = new DifferentialPrivacyProcessor(config);
+            var processor = CreateProcessor();
+            var node = CreateNode(100.0);
 
             // Act & Assert
-            Assert.Throws<ArgumentException>(() => processor.AddNoise(double.PositiveInfinity));
+            Assert.Throws<ArgumentNullException>(() => processor.Process(node, null));
         }
 
         [Fact]
-        public void AddNoise_WithNegativeInfinity_ShouldThrowArgumentException()
+        public void Process_WithNonNumericValue_ThrowsArgumentException()
         {
             // Arrange
-            var config = CreateDefaultConfig();
-            var processor = new DifferentialPrivacyProcessor(config);
+            var processor = CreateProcessor();
+            var node = CreateNode("not a number");
+            var settings = CreateSettings();
 
             // Act & Assert
-            Assert.Throws<ArgumentException>(() => processor.AddNoise(double.NegativeInfinity));
+            Assert.Throws<ArgumentException>(() => processor.Process(node, settings));
         }
 
         [Fact]
-        public void AddNoise_WithMaxValue_ShouldHandleGracefully()
+        public void Process_WithNullValue_ThrowsArgumentException()
         {
             // Arrange
-            var config = CreateDefaultConfig();
-            var processor = new DifferentialPrivacyProcessor(config);
-
-            // Act
-            var result = processor.AddNoise(double.MaxValue);
-
-            // Assert - Should not overflow or throw
-            Assert.True(double.IsFinite(result) || double.IsPositiveInfinity(result));
-        }
-
-        [Fact]
-        public void AddNoise_WithMinValue_ShouldHandleGracefully()
-        {
-            // Arrange
-            var config = CreateDefaultConfig();
-            var processor = new DifferentialPrivacyProcessor(config);
-
-            // Act
-            var result = processor.AddNoise(double.MinValue);
-
-            // Assert - Should not underflow or throw
-            Assert.True(double.IsFinite(result) || double.IsNegativeInfinity(result));
-        }
-
-        [Fact]
-        public void AddNoiseToArray_WithNullArray_ShouldThrowArgumentNullException()
-        {
-            // Arrange
-            var config = CreateDefaultConfig();
-            var processor = new DifferentialPrivacyProcessor(config);
+            var processor = CreateProcessor();
+            var node = CreateNode(null);
+            var settings = CreateSettings();
 
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => processor.AddNoiseToArray(null));
+            Assert.Throws<ArgumentException>(() => processor.Process(node, settings));
         }
 
         [Fact]
-        public void AddNoiseToArray_WithArrayContainingNaN_ShouldThrowArgumentException()
+        public void Process_WithZeroEpsilon_ThrowsArgumentException()
         {
             // Arrange
-            var config = CreateDefaultConfig();
-            var processor = new DifferentialPrivacyProcessor(config);
-            var values = new[] { 1.0, double.NaN, 3.0 };
+            var processor = CreateProcessor();
+            var node = CreateNode(100.0);
+            var settings = CreateSettings(epsilon: 0.0);
 
             // Act & Assert
-            Assert.Throws<ArgumentException>(() => processor.AddNoiseToArray(values));
+            Assert.Throws<ArgumentException>(() => processor.Process(node, settings));
         }
 
         [Fact]
-        public void AddNoiseToArray_WithArrayContainingInfinity_ShouldThrowArgumentException()
+        public void Process_WithNegativeEpsilon_ThrowsArgumentException()
         {
             // Arrange
-            var config = CreateDefaultConfig();
-            var processor = new DifferentialPrivacyProcessor(config);
-            var values = new[] { 1.0, double.PositiveInfinity, 3.0 };
+            var processor = CreateProcessor();
+            var node = CreateNode(100.0);
+            var settings = CreateSettings(epsilon: -1.0);
 
             // Act & Assert
-            Assert.Throws<ArgumentException>(() => processor.AddNoiseToArray(values));
+            Assert.Throws<ArgumentException>(() => processor.Process(node, settings));
         }
 
         [Fact]
-        public void Constructor_WithEpsilonTooSmall_ShouldThrowArgumentException()
+        public void Process_WithZeroSensitivity_ThrowsArgumentException()
         {
             // Arrange
-            var config = CreateConfigWithEpsilon(1e-10);
+            var processor = CreateProcessor();
+            var node = CreateNode(100.0);
+            var settings = CreateSettings(sensitivity: 0.0);
 
             // Act & Assert
-            Assert.Throws<ArgumentException>(() => new DifferentialPrivacyProcessor(config));
+            Assert.Throws<ArgumentException>(() => processor.Process(node, settings));
         }
 
         [Fact]
-        public void Constructor_WithEpsilonTooLarge_ShouldThrowArgumentException()
+        public void Process_WithNegativeSensitivity_ThrowsArgumentException()
         {
             // Arrange
-            var config = CreateConfigWithEpsilon(1000.0);
+            var processor = CreateProcessor();
+            var node = CreateNode(100.0);
+            var settings = CreateSettings(sensitivity: -1.0);
 
             // Act & Assert
-            Assert.Throws<ArgumentException>(() => new DifferentialPrivacyProcessor(config));
+            Assert.Throws<ArgumentException>(() => processor.Process(node, settings));
         }
 
         [Fact]
-        public void Constructor_WithInvalidConfigurationType_ShouldThrowArgumentException()
+        public void Process_WithInvalidMechanism_ThrowsArgumentException()
         {
             // Arrange
-            var config = new Dictionary<string, object>
-            {
-                ["epsilon"] = "not a number"
-            };
+            var processor = CreateProcessor();
+            var node = CreateNode(100.0);
+            var settings = CreateSettings(mechanism: "invalid_mechanism");
 
             // Act & Assert
-            Assert.Throws<ArgumentException>(() => new DifferentialPrivacyProcessor(config));
+            Assert.Throws<ArgumentException>(() => processor.Process(node, settings));
         }
 
         [Fact]
-        public void Constructor_WithMissingRequiredParameter_ShouldUseDefault()
+        public void Process_WithEmptySettings_UsesDefaults()
         {
             // Arrange
-            var config = new Dictionary<string, object>();
+            var processor = CreateProcessor();
+            var node = CreateNode(100.0);
+            var settings = new Dictionary<string, object>();
 
-            // Act
-            var processor = new DifferentialPrivacyProcessor(config);
+            // Act - should not throw, should use defaults
+            var result = processor.Process(node, settings);
 
-            // Assert - Should create successfully with defaults
-            Assert.NotNull(processor);
+            // Assert
+            Assert.NotNull(result);
         }
 
         [Theory]
-        [InlineData(0.0)]
-        [InlineData(-1.0)]
-        [InlineData(-100.0)]
-        public void Constructor_WithInvalidEpsilonValues_ShouldThrowArgumentException(double epsilon)
+        [InlineData(double.PositiveInfinity)]
+        [InlineData(double.NegativeInfinity)]
+        [InlineData(double.NaN)]
+        public void Process_WithInvalidEpsilonValue_ThrowsArgumentException(double invalidEpsilon)
         {
             // Arrange
-            var config = CreateConfigWithEpsilon(epsilon);
+            var processor = CreateProcessor();
+            var node = CreateNode(100.0);
+            var settings = CreateSettings(epsilon: invalidEpsilon);
 
             // Act & Assert
-            Assert.Throws<ArgumentException>(() => new DifferentialPrivacyProcessor(config));
+            Assert.Throws<ArgumentException>(() => processor.Process(node, settings));
         }
 
         [Theory]
-        [InlineData(-0.1)]
-        [InlineData(1.1)]
-        [InlineData(2.0)]
-        public void Constructor_WithInvalidDeltaValues_ShouldThrowArgumentException(double delta)
+        [InlineData(double.PositiveInfinity)]
+        [InlineData(double.NegativeInfinity)]
+        [InlineData(double.NaN)]
+        public void Process_WithInvalidSensitivityValue_ThrowsArgumentException(double invalidSensitivity)
         {
             // Arrange
-            var config = CreateConfigWithDelta(delta);
+            var processor = CreateProcessor();
+            var node = CreateNode(100.0);
+            var settings = CreateSettings(sensitivity: invalidSensitivity);
 
             // Act & Assert
-            Assert.Throws<ArgumentException>(() => new DifferentialPrivacyProcessor(config));
-        }
-
-        [Theory]
-        [InlineData(0.0)]
-        [InlineData(-1.0)]
-        [InlineData(-100.0)]
-        public void Constructor_WithInvalidSensitivityValues_ShouldThrowArgumentException(double sensitivity)
-        {
-            // Arrange
-            var config = CreateConfigWithSensitivity(sensitivity);
-
-            // Act & Assert
-            Assert.Throws<ArgumentException>(() => new DifferentialPrivacyProcessor(config));
+            Assert.Throws<ArgumentException>(() => processor.Process(node, settings));
         }
     }
 }

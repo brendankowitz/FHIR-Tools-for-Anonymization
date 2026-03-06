@@ -1,147 +1,72 @@
 using System;
 using System.Collections.Generic;
+using Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations;
 using Microsoft.Health.Fhir.Anonymizer.Core.Processors;
 using Xunit;
 
 namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.Processors.DifferentialPrivacy
 {
     /// <summary>
-    /// Base class for DifferentialPrivacyProcessor tests.
-    /// Provides shared test fixtures, helper methods, and common setup/teardown logic.
-    /// Organization: Tests are split into focused classes by functionality:
-    /// - ConfigurationTests: epsilon, delta, sensitivity parameters
-    /// - NoiseTests: Laplace, Gaussian mechanisms
-    /// - PrivacyBudgetTests: budget tracking, depletion
-    /// - ValidationTests: input validation, boundary conditions
+    /// Base class for DifferentialPrivacyProcessor tests providing common helper methods and test utilities.
     /// </summary>
-    public abstract class DifferentialPrivacyProcessorTestBase
+    public class DifferentialPrivacyProcessorTestBase
     {
-        protected const double DefaultEpsilon = 1.0;
-        protected const double DefaultDelta = 1e-5;
-        protected const double DefaultSensitivity = 1.0;
-        protected const double Tolerance = 1e-10;
+        /// <summary>
+        /// Creates a DifferentialPrivacyProcessor instance for testing.
+        /// </summary>
+        /// <returns>A new DifferentialPrivacyProcessor instance.</returns>
+        protected DifferentialPrivacyProcessor CreateProcessor()
+        {
+            return new DifferentialPrivacyProcessor();
+        }
 
         /// <summary>
-        /// Creates a test configuration dictionary with default parameters.
+        /// Creates settings dictionary with differential privacy configuration.
         /// </summary>
-        protected Dictionary<string, object> CreateDefaultConfig()
+        /// <param name="epsilon">Privacy budget parameter (default: 1.0).</param>
+        /// <param name="sensitivity">Sensitivity parameter (default: 1.0).</param>
+        /// <param name="mechanism">Noise mechanism (default: "laplace").</param>
+        /// <param name="seed">Random seed for reproducible tests (optional).</param>
+        /// <returns>Dictionary of settings for differential privacy.</returns>
+        protected Dictionary<string, object> CreateSettings(double epsilon = 1.0, double sensitivity = 1.0, string mechanism = "laplace", int? seed = null)
         {
-            return new Dictionary<string, object>
+            var settings = new Dictionary<string, object>
             {
-                ["epsilon"] = DefaultEpsilon,
-                ["delta"] = DefaultDelta,
-                ["sensitivity"] = DefaultSensitivity
+                ["epsilon"] = epsilon,
+                ["sensitivity"] = sensitivity,
+                ["mechanism"] = mechanism
+            };
+
+            if (seed.HasValue)
+            {
+                settings["seed"] = seed.Value;
+            }
+
+            return settings;
+        }
+
+        /// <summary>
+        /// Creates an ElementNode for testing with the specified value.
+        /// </summary>
+        /// <param name="value">The value to set on the node.</param>
+        /// <returns>A new ElementNode with the specified value.</returns>
+        protected ElementNode CreateNode(object value)
+        {
+            return new ElementNode
+            {
+                Value = value
             };
         }
 
         /// <summary>
-        /// Creates a test configuration with custom epsilon value.
+        /// Asserts that a value is within the expected range.
         /// </summary>
-        protected Dictionary<string, object> CreateConfigWithEpsilon(double epsilon)
-        {
-            var config = CreateDefaultConfig();
-            config["epsilon"] = epsilon;
-            return config;
-        }
-
-        /// <summary>
-        /// Creates a test configuration with custom delta value.
-        /// </summary>
-        protected Dictionary<string, object> CreateConfigWithDelta(double delta)
-        {
-            var config = CreateDefaultConfig();
-            config["delta"] = delta;
-            return config;
-        }
-
-        /// <summary>
-        /// Creates a test configuration with custom sensitivity value.
-        /// </summary>
-        protected Dictionary<string, object> CreateConfigWithSensitivity(double sensitivity)
-        {
-            var config = CreateDefaultConfig();
-            config["sensitivity"] = sensitivity;
-            return config;
-        }
-
-        /// <summary>
-        /// Creates a test configuration with noise mechanism specified.
-        /// </summary>
-        protected Dictionary<string, object> CreateConfigWithMechanism(string mechanism)
-        {
-            var config = CreateDefaultConfig();
-            config["mechanism"] = mechanism;
-            return config;
-        }
-
-        /// <summary>
-        /// Creates a test configuration with privacy budget.
-        /// </summary>
-        protected Dictionary<string, object> CreateConfigWithBudget(double budget)
-        {
-            var config = CreateDefaultConfig();
-            config["privacyBudget"] = budget;
-            return config;
-        }
-
-        /// <summary>
-        /// Asserts that two doubles are approximately equal within tolerance.
-        /// </summary>
-        protected void AssertApproximatelyEqual(double expected, double actual, double tolerance = Tolerance)
-        {
-            Assert.True(Math.Abs(expected - actual) < tolerance,
-                $"Expected {expected} but got {actual} (tolerance: {tolerance})");
-        }
-
-        /// <summary>
-        /// Asserts that a value is within a specified range.
-        /// </summary>
+        /// <param name="value">The value to check.</param>
+        /// <param name="min">Minimum expected value.</param>
+        /// <param name="max">Maximum expected value.</param>
         protected void AssertInRange(double value, double min, double max)
         {
-            Assert.True(value >= min && value <= max,
-                $"Expected value to be in range [{min}, {max}] but got {value}");
-        }
-
-        /// <summary>
-        /// Asserts that noise was added (value changed from original).
-        /// </summary>
-        protected void AssertNoiseAdded(double original, double noised)
-        {
-            Assert.NotEqual(original, noised);
-        }
-
-        /// <summary>
-        /// Creates test data array with specified values.
-        /// </summary>
-        protected double[] CreateTestData(params double[] values)
-        {
-            return values;
-        }
-
-        /// <summary>
-        /// Creates test data array with uniform values.
-        /// </summary>
-        protected double[] CreateUniformTestData(int count, double value)
-        {
-            var data = new double[count];
-            for (int i = 0; i < count; i++)
-            {
-                data[i] = value;
-            }
-            return data;
-        }
-
-        /// <summary>
-        /// Creates sequential test data (0, 1, 2, ...).
-        /// </summary>
-        protected double[] CreateSequentialTestData(int count)
-        {
-            var data = new double[count];
-            for (int i = 0; i < count; i++)
-            {
-                data[i] = i;
-            }
-            return data;
+            Assert.True(value >= min && value <= max, $"Expected value to be in range [{min}, {max}], but was {value}");
         }
     }
 }

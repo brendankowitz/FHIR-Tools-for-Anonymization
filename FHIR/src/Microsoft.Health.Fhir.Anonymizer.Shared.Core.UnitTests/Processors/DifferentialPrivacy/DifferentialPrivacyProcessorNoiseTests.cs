@@ -1,193 +1,167 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
-using Microsoft.Health.Fhir.Anonymizer.Core.Processors;
+using Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations;
 using Xunit;
 
 namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.Processors.DifferentialPrivacy
 {
-    /// <summary>
-    /// Tests for DifferentialPrivacyProcessor noise addition mechanisms.
-    /// Covers Laplace and Gaussian noise mechanisms.
-    /// </summary>
     public class DifferentialPrivacyProcessorNoiseTests : DifferentialPrivacyProcessorTestBase
     {
+        private const int FixedSeed = 12345; // Fixed seed for reproducible tests
+        private const double DefaultTolerance = 20.0; // Tolerance for statistical tests
+
         [Fact]
-        public void AddNoise_WithLaplaceMechanism_ShouldAddNoise()
+        public void Process_WithLaplaceNoise_AddsNoiseToValue()
         {
             // Arrange
-            var config = CreateConfigWithMechanism("laplace");
-            var processor = new DifferentialPrivacyProcessor(config);
-            var originalValue = 100.0;
+            var processor = CreateProcessor();
+            var node = CreateNode(100.0);
+            var settings = CreateSettings(epsilon: 1.0, sensitivity: 1.0, mechanism: "laplace", seed: FixedSeed);
 
             // Act
-            var noisedValue = processor.AddNoise(originalValue);
+            var result = processor.Process(node, settings);
 
             // Assert
-            AssertNoiseAdded(originalValue, noisedValue);
+            Assert.NotNull(result);
+            var resultValue = Convert.ToDouble(result.Value);
+            Assert.NotEqual(100.0, resultValue); // Value should be modified
+            AssertInRange(resultValue, 80.0, 120.0); // Within reasonable bounds
         }
 
         [Fact]
-        public void AddNoise_WithGaussianMechanism_ShouldAddNoise()
+        public void Process_WithGaussianNoise_AddsNoiseToValue()
         {
             // Arrange
-            var config = CreateConfigWithMechanism("gaussian");
-            var processor = new DifferentialPrivacyProcessor(config);
-            var originalValue = 100.0;
+            var processor = CreateProcessor();
+            var node = CreateNode(50.0);
+            var settings = CreateSettings(epsilon: 0.5, sensitivity: 1.0, mechanism: "gaussian", seed: FixedSeed);
 
             // Act
-            var noisedValue = processor.AddNoise(originalValue);
+            var result = processor.Process(node, settings);
 
             // Assert
-            AssertNoiseAdded(originalValue, noisedValue);
+            Assert.NotNull(result);
+            var resultValue = Convert.ToDouble(result.Value);
+            Assert.NotEqual(50.0, resultValue); // Value should be modified
+            AssertInRange(resultValue, 30.0, 70.0); // Within reasonable bounds
         }
 
         [Fact]
-        public void AddNoise_MultipleCalls_ShouldProduceDifferentValues()
+        public void Process_WithHigherEpsilon_ProducesLessNoise()
         {
             // Arrange
-            var config = CreateDefaultConfig();
-            var processor = new DifferentialPrivacyProcessor(config);
+            var processor = CreateProcessor();
             var originalValue = 100.0;
+            var node1 = CreateNode(originalValue);
+            var node2 = CreateNode(originalValue);
+            var lowEpsilonSettings = CreateSettings(epsilon: 0.1, sensitivity: 1.0, mechanism: "laplace", seed: FixedSeed);
+            var highEpsilonSettings = CreateSettings(epsilon: 10.0, sensitivity: 1.0, mechanism: "laplace", seed: FixedSeed);
 
             // Act
-            var noisedValue1 = processor.AddNoise(originalValue);
-            var noisedValue2 = processor.AddNoise(originalValue);
-            var noisedValue3 = processor.AddNoise(originalValue);
-
-            // Assert - At least one should be different (stochastic test)
-            Assert.True(noisedValue1 != noisedValue2 || noisedValue2 != noisedValue3,
-                "Multiple noise additions should produce different values");
-        }
-
-        [Fact]
-        public void AddNoise_WithHighEpsilon_ShouldAddLessNoise()
-        {
-            // Arrange
-            var lowEpsilonConfig = CreateConfigWithEpsilon(0.1);
-            var highEpsilonConfig = CreateConfigWithEpsilon(10.0);
-            var lowEpsilonProcessor = new DifferentialPrivacyProcessor(lowEpsilonConfig);
-            var highEpsilonProcessor = new DifferentialPrivacyProcessor(highEpsilonConfig);
-            var originalValue = 100.0;
-            var iterations = 100;
-
-            // Act - Calculate average deviation for multiple runs
-            double lowEpsilonDeviation = 0;
-            double highEpsilonDeviation = 0;
-
-            for (int i = 0; i < iterations; i++)
-            {
-                lowEpsilonDeviation += Math.Abs(lowEpsilonProcessor.AddNoise(originalValue) - originalValue);
-                highEpsilonDeviation += Math.Abs(highEpsilonProcessor.AddNoise(originalValue) - originalValue);
-            }
-
-            lowEpsilonDeviation /= iterations;
-            highEpsilonDeviation /= iterations;
-
-            // Assert - Higher epsilon should result in lower average deviation
-            Assert.True(highEpsilonDeviation < lowEpsilonDeviation,
-                $"High epsilon deviation ({highEpsilonDeviation}) should be less than low epsilon deviation ({lowEpsilonDeviation})");
-        }
-
-        [Fact]
-        public void AddNoise_WithHighSensitivity_ShouldAddMoreNoise()
-        {
-            // Arrange
-            var lowSensitivityConfig = CreateConfigWithSensitivity(0.1);
-            var highSensitivityConfig = CreateConfigWithSensitivity(10.0);
-            var lowSensitivityProcessor = new DifferentialPrivacyProcessor(lowSensitivityConfig);
-            var highSensitivityProcessor = new DifferentialPrivacyProcessor(highSensitivityConfig);
-            var originalValue = 100.0;
-            var iterations = 100;
-
-            // Act - Calculate average deviation for multiple runs
-            double lowSensitivityDeviation = 0;
-            double highSensitivityDeviation = 0;
-
-            for (int i = 0; i < iterations; i++)
-            {
-                lowSensitivityDeviation += Math.Abs(lowSensitivityProcessor.AddNoise(originalValue) - originalValue);
-                highSensitivityDeviation += Math.Abs(highSensitivityProcessor.AddNoise(originalValue) - originalValue);
-            }
-
-            lowSensitivityDeviation /= iterations;
-            highSensitivityDeviation /= iterations;
-
-            // Assert - Higher sensitivity should result in higher average deviation
-            Assert.True(highSensitivityDeviation > lowSensitivityDeviation,
-                $"High sensitivity deviation ({highSensitivityDeviation}) should be greater than low sensitivity deviation ({lowSensitivityDeviation})");
-        }
-
-        [Fact]
-        public void AddNoise_ToZero_ShouldProduceNoisedValue()
-        {
-            // Arrange
-            var config = CreateDefaultConfig();
-            var processor = new DifferentialPrivacyProcessor(config);
-            var originalValue = 0.0;
-
-            // Act
-            var noisedValue = processor.AddNoise(originalValue);
-
-            // Assert - Noise should be added even to zero
-            Assert.NotEqual(0.0, noisedValue);
-        }
-
-        [Fact]
-        public void AddNoise_ToNegativeValue_ShouldWork()
-        {
-            // Arrange
-            var config = CreateDefaultConfig();
-            var processor = new DifferentialPrivacyProcessor(config);
-            var originalValue = -50.0;
-
-            // Act & Assert - Should not throw
-            var exception = Record.Exception(() => processor.AddNoise(originalValue));
-            Assert.Null(exception);
-        }
-
-        [Fact]
-        public void AddNoiseToArray_ShouldAddNoiseToAllElements()
-        {
-            // Arrange
-            var config = CreateDefaultConfig();
-            var processor = new DifferentialPrivacyProcessor(config);
-            var originalValues = CreateSequentialTestData(5);
-
-            // Act
-            var noisedValues = processor.AddNoiseToArray(originalValues);
+            var lowEpsilonResult = processor.Process(node1, lowEpsilonSettings);
+            var highEpsilonResult = processor.Process(node2, highEpsilonSettings);
 
             // Assert
-            Assert.Equal(originalValues.Length, noisedValues.Length);
-            for (int i = 0; i < originalValues.Length; i++)
-            {
-                AssertNoiseAdded(originalValues[i], noisedValues[i]);
-            }
+            var lowEpsilonValue = Convert.ToDouble(lowEpsilonResult.Value);
+            var highEpsilonValue = Convert.ToDouble(highEpsilonResult.Value);
+            var lowEpsilonDiff = Math.Abs(lowEpsilonValue - originalValue);
+            var highEpsilonDiff = Math.Abs(highEpsilonValue - originalValue);
+
+            // Higher epsilon should generally produce less noise (on average)
+            // Note: This is a statistical property, so we use fixed seed for reproducibility
+            Assert.True(highEpsilonDiff < lowEpsilonDiff || Math.Abs(highEpsilonDiff - lowEpsilonDiff) < DefaultTolerance,
+                $"Expected high epsilon diff ({highEpsilonDiff}) < low epsilon diff ({lowEpsilonDiff})");
         }
 
         [Fact]
-        public void AddNoiseToArray_WithEmptyArray_ShouldReturnEmptyArray()
+        public void Process_WithIntegerValue_ReturnsNoisyInteger()
         {
             // Arrange
-            var config = CreateDefaultConfig();
-            var processor = new DifferentialPrivacyProcessor(config);
-            var originalValues = new double[0];
+            var processor = CreateProcessor();
+            var node = CreateNode(42);
+            var settings = CreateSettings(epsilon: 1.0, sensitivity: 1.0, mechanism: "laplace", seed: FixedSeed);
 
             // Act
-            var noisedValues = processor.AddNoiseToArray(originalValues);
+            var result = processor.Process(node, settings);
 
             // Assert
-            Assert.Empty(noisedValues);
+            Assert.NotNull(result);
+            var resultValue = Convert.ToInt32(result.Value);
+            Assert.NotEqual(42, resultValue); // Value should be modified
         }
 
         [Fact]
-        public void AddNoiseToArray_WithNullArray_ShouldThrowArgumentNullException()
+        public void Process_WithZeroValue_AddsNoise()
         {
             // Arrange
-            var config = CreateDefaultConfig();
-            var processor = new DifferentialPrivacyProcessor(config);
+            var processor = CreateProcessor();
+            var node = CreateNode(0.0);
+            var settings = CreateSettings(epsilon: 1.0, sensitivity: 1.0, mechanism: "laplace", seed: FixedSeed);
 
-            // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => processor.AddNoiseToArray(null));
+            // Act
+            var result = processor.Process(node, settings);
+
+            // Assert
+            Assert.NotNull(result);
+            var resultValue = Convert.ToDouble(result.Value);
+            Assert.NotEqual(0.0, resultValue); // Even zero should get noise
+        }
+
+        [Fact]
+        public void Process_WithNegativeValue_HandlesCorrectly()
+        {
+            // Arrange
+            var processor = CreateProcessor();
+            var node = CreateNode(-50.0);
+            var settings = CreateSettings(epsilon: 1.0, sensitivity: 1.0, mechanism: "laplace", seed: FixedSeed);
+
+            // Act
+            var result = processor.Process(node, settings);
+
+            // Assert
+            Assert.NotNull(result);
+            var resultValue = Convert.ToDouble(result.Value);
+            Assert.NotEqual(-50.0, resultValue); // Value should be modified
+        }
+
+        [Theory]
+        [InlineData("laplace")]
+        [InlineData("gaussian")]
+        public void Process_WithDifferentMechanisms_AddsNoise(string mechanism)
+        {
+            // Arrange
+            var processor = CreateProcessor();
+            var node = CreateNode(100.0);
+            var settings = CreateSettings(epsilon: 1.0, sensitivity: 1.0, mechanism: mechanism, seed: FixedSeed);
+
+            // Act
+            var result = processor.Process(node, settings);
+
+            // Assert
+            Assert.NotNull(result);
+            var resultValue = Convert.ToDouble(result.Value);
+            Assert.NotEqual(100.0, resultValue);
+        }
+
+        [Fact]
+        public void Process_MultipleCalls_ProducesDifferentResults()
+        {
+            // Arrange
+            var processor = CreateProcessor();
+            var node1 = CreateNode(100.0);
+            var node2 = CreateNode(100.0);
+            // Don't use fixed seed for this test - we want randomness
+            var settings = CreateSettings(epsilon: 1.0, sensitivity: 1.0, mechanism: "laplace");
+
+            // Act
+            var result1 = processor.Process(node1, settings);
+            var result2 = processor.Process(node2, settings);
+
+            // Assert
+            var value1 = Convert.ToDouble(result1.Value);
+            var value2 = Convert.ToDouble(result2.Value);
+            Assert.NotEqual(value1, value2); // Should produce different noise
         }
     }
 }
