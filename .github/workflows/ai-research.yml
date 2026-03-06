@@ -62,9 +62,9 @@ jobs:
           copilot-token: ${{ secrets.COPILOT_GITHUB_TOKEN }}
           model: claude-sonnet-4.5
           output-type: issue
-          focus-areas: 'dependencies,security,technical-debt,industry-research'
+          focus-areas: 'dependencies,security,technical-debt,industry-research,issue-review'
           create-actionable-issues: 'true'
-          min-priority-for-issue: 'high'
+          min-priority-for-issue: 'medium'
           issue-number: ${{ github.event.inputs.issue_number || '' }}
           mode: ${{ github.event.inputs.mode || 'scheduled' }}
 
