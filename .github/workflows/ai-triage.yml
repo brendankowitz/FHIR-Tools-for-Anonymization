@@ -81,6 +81,24 @@ jobs:
           enable-auto-label: 'true'
           allow-external-ai-contributors: 'true'
 
+      - name: Trigger Coding Agent for Sub-Issues
+        if: steps.triage.outputs.sub-issue-numbers != ''
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const issueNumbers = '${{ steps.triage.outputs.sub-issue-numbers }}'.split(',').filter(n => n.trim());
+            for (const issueNumber of issueNumbers) {
+              await github.rest.actions.createWorkflowDispatch({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: 'ai-coding.yml',
+                ref: 'master',
+                inputs: { issue_number: issueNumber.trim() }
+              });
+              core.info(`Triggered coding agent for sub-issue #${issueNumber}`);
+            }
+
       - name: Trigger Coding Agent
         if: steps.triage.outputs.recommended-action == 'assign-to-agent'
         uses: actions/github-script@v7
