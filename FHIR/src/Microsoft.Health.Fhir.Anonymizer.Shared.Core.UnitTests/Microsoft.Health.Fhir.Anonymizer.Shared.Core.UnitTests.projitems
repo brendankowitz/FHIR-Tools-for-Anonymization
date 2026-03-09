@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup>
     <MSBuildAllProjects>$(MSBuildAllProjects);$(MSBuildThisFileFullPath)</MSBuildAllProjects>
@@ -13,6 +13,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)AnonymizerConfigurations\AnonymizerConfigurationManagerTests.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)AnonymizerConfigurations\AnonymizerConfigurationTests.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)AnonymizerConfigurations\AnonymizerConfigurationValidatorTests.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)AnonymizerConfigurations\ParameterConfigurationTests.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)EmptyElementTest.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)AnonymizerEngineTests.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Extensions\TypedElementNavExtensionsTests.cs" />

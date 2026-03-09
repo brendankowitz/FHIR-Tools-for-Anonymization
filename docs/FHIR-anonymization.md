@@ -107,3 +107,51 @@ You can use the Azure PowerShell to create a Data Factory and a pipeline to anon
 #### Prepare azure storage resource container
 
 Create a source and a destination container on your blob store. Upload your FHIR files to the source blob container. The pipeline will read the files from the source container and upload the anonymized files to the destination container.
+
+## Key Length Requirements for Cryptographic Operations
+
+When configuring cryptographic operations (`cryptoHash`, `encrypt`, `dateShift`), keys must meet minimum security requirements enforced at validation time.
+
+### Minimum Key Length
+
+All cryptographic keys (`cryptoHashKey`, `encryptKey`, `dateShiftKey`) must be at least **32 characters** in length. This requirement is based on NIST SP 800-107 Rev. 1 guidance that HMAC keys should be at least as long as the hash output length (SHA-256 = 32 bytes).
+
+Keys that are too short will cause a `SecurityException` at configuration validation time, preventing accidental use of weak keys in production.
+
+### Generating Secure Keys
+
+Use one of the following commands to generate a cryptographically secure random key:
+
+**Linux/macOS:**
+```bash
+openssl rand -base64 32
+```
+
+**Windows (PowerShell):**
+```powershell
+[Convert]::ToBase64String([System.Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
+```
+
+**.NET:**
+```csharp
+var key = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+```
+
+### Key Validation Rules
+
+The tool validates all cryptographic keys and will throw a `SecurityException` for:
+
+| Condition | Behaviour |
+|---|---|
+| Null or empty key | Allowed — feature is disabled when key is absent |
+| Whitespace-only key | Rejected — provides no cryptographic entropy |
+| Placeholder key (`YOUR_KEY_HERE`, `CHANGE_ME`, etc.) | Rejected — template values must be replaced |
+| Key shorter than 32 characters | Rejected — minimum length per NIST SP 800-107 |
+| Weak key (`password`, `12345678`, all-same-character string) | Rejected — insufficient entropy |
+
+### Best Practices
+
+- Never commit cryptographic keys to source control
+- Use environment variables or secret managers (Azure Key Vault, AWS Secrets Manager) for production keys
+- Use different keys per environment (development, staging, production)
+- Rotate keys periodically according to your security policy
