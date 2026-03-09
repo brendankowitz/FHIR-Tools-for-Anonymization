@@ -1,0 +1,41 @@
+name: TODO/FIXME Gate
+
+on:
+  pull_request:
+    branches:
+      - main
+      - master
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  todo-gate:
+    name: Scan for TODO/FIXME in security-sensitive paths
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Make check script executable
+        run: chmod +x scripts/check-todo-comments.sh
+
+      - name: Scan security-sensitive paths for TODO/FIXME comments
+        run: scripts/check-todo-comments.sh
+
+      - name: Summary – policy reminder
+        if: always()
+        run: |
+          echo "### TODO/FIXME Gate Policy" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "This gate scans the following security-sensitive paths for unresolved" >> $GITHUB_STEP_SUMMARY
+          echo "developer annotations (\`// TODO\` / \`// FIXME\`) in C# source files:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- \`FHIR/src/Microsoft.Health.Fhir.Anonymizer.Shared.Core/AnonymizerConfigurations/\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`FHIR/src/Microsoft.Health.Fhir.Anonymizer.Shared.Core/Processors/\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`FHIR/src/Microsoft.Health.Fhir.Anonymizer.Shared.Core/Visitors/\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`DICOM/src/Microsoft.Health.Dicom.Anonymizer.Core/\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Resolve all annotations before merging. See [FHIR anonymization docs](docs/FHIR-anonymization.md) for guidance." >> $GITHUB_STEP_SUMMARY
