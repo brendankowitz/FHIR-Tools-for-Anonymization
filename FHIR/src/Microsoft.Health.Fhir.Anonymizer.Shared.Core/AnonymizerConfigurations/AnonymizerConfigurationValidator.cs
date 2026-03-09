@@ -1,7 +1,5 @@
 ﻿using System;
 using System.Linq;
-using System.Security.Cryptography;
-using System.Text;
 using Hl7.FhirPath;
 using Microsoft.Extensions.Logging;
 using Microsoft.Health.Fhir.Anonymizer.Core.Exceptions;
@@ -72,39 +70,11 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
                 }
             }
 
-            // Check AES key size is valid (16, 24 or 32 bytes).
-            if (!string.IsNullOrEmpty(config.ParameterConfiguration?.EncryptKey))
-            {
-                using Aes aes = Aes.Create();
-                var encryptKeySize = Encoding.UTF8.GetByteCount(config.ParameterConfiguration.EncryptKey) * 8;
-                if (!IsValidKeySize(encryptKeySize, aes.LegalKeySizes))
-                {
-                    throw new AnonymizerConfigurationException($"Invalid encrypt key size : {encryptKeySize} bits! Please provide key sizes of 128, 192 or 256 bits.");
-                }
-            }
-        }
-
-        // The following method takes a bit length input and returns whether that length is a valid size
-        // validSizes for AES: MinSize=128, MaxSize=256, SkipSize=64
-        private bool IsValidKeySize(int bitLength, KeySizes[] validSizes)
-        {
-            if (validSizes == null)
-            {
-                return false;
-            }
-
-            for (int i = 0; i < validSizes.Length; i++)
-            {
-                for (int j = validSizes[i].MinSize; j <= validSizes[i].MaxSize; j += validSizes[i].SkipSize)
-                {
-                    if (j == bitLength)
-                    {
-                        return true;
-                    }
-                }
-            }
-
-            return false;
+            // Delegate all parameter-level validation (including AES key-size check,
+            // placeholder detection, and weak-key detection) to ParameterConfiguration.Validate().
+            // This closes the split-validation gap: any code path that calls this validator
+            // automatically receives the same checks as code that calls Validate() directly.
+            config.ParameterConfiguration?.Validate();
         }
     }
 }

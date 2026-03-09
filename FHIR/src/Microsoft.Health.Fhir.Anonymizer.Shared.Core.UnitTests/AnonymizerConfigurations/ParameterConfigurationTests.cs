@@ -2,161 +2,87 @@ using Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations;
 using Microsoft.Health.Fhir.Anonymizer.Core.Exceptions;
 using Xunit;
 
-namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.AnonymizerConfigurations
+namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests
 {
     public class ParameterConfigurationTests
     {
-        // -----------------------------------------------------------------------
-        // DateShiftFixedOffsetInDays — valid cases (should NOT throw)
-        // -----------------------------------------------------------------------
-
         [Fact]
-        public void Validate_WhenDateShiftFixedOffsetIsNull_DoesNotThrow()
+        public void GivenEncryptKeyOf16Bytes_WhenValidate_NoExceptionThrown()
         {
             var config = new ParameterConfiguration
             {
-                DateShiftFixedOffsetInDays = null
+                // 16 distinct ASCII chars = 128 bits, valid AES key size.
+                // Must NOT be all-same-character (would trigger the weak-key guard).
+                EncryptKey = "abcdefghijklmnop"
             };
-
-            // Should not throw — null means "use key-based shift"
-            config.Validate();
+            config.Validate(); // should not throw
         }
 
         [Fact]
-        public void Validate_WhenDateShiftFixedOffsetIsZero_DoesNotThrow()
+        public void GivenEncryptKeyOf24Bytes_WhenValidate_NoExceptionThrown()
         {
             var config = new ParameterConfiguration
             {
-                DateShiftFixedOffsetInDays = 0
+                // 24 distinct ASCII chars = 192 bits, valid AES key size.
+                EncryptKey = "abcdefghijklmnopqrstuvwx"
             };
-
-            config.Validate();
+            config.Validate(); // should not throw
         }
 
         [Fact]
-        public void Validate_WhenDateShiftFixedOffsetIsAtMinBoundary_DoesNotThrow()
+        public void GivenEncryptKeyOf32Bytes_WhenValidate_NoExceptionThrown()
         {
             var config = new ParameterConfiguration
             {
-                DateShiftFixedOffsetInDays = ParameterConfiguration.MinDateShiftOffsetDays // -365
+                // 32 distinct ASCII chars = 256 bits, valid AES key size.
+                EncryptKey = "abcdefghijklmnopqrstuvwxyz012345"
             };
-
-            config.Validate();
+            config.Validate(); // should not throw
         }
 
         [Fact]
-        public void Validate_WhenDateShiftFixedOffsetIsAtMaxBoundary_DoesNotThrow()
+        public void GivenEncryptKeyOf20Bytes_WhenValidate_ExceptionThrown()
         {
             var config = new ParameterConfiguration
             {
-                DateShiftFixedOffsetInDays = ParameterConfiguration.MaxDateShiftOffsetDays // +365
+                // Same 20-char key used in configuration-invalid-encryptkey.json.
+                // 20 bytes = 160 bits, not a valid AES key size.
+                EncryptKey = "01234567890123456789"
             };
-
-            config.Validate();
-        }
-
-        [Theory]
-        [InlineData(-364)]
-        [InlineData(-1)]
-        [InlineData(1)]
-        [InlineData(364)]
-        public void Validate_WhenDateShiftFixedOffsetIsWithinRange_DoesNotThrow(int offset)
-        {
-            var config = new ParameterConfiguration
-            {
-                DateShiftFixedOffsetInDays = offset
-            };
-
-            config.Validate();
-        }
-
-        // -----------------------------------------------------------------------
-        // DateShiftFixedOffsetInDays — invalid cases (should throw)
-        // -----------------------------------------------------------------------
-
-        [Fact]
-        public void Validate_WhenDateShiftFixedOffsetIsBelowMin_ThrowsAnonymizerConfigurationException()
-        {
-            var config = new ParameterConfiguration
-            {
-                DateShiftFixedOffsetInDays = ParameterConfiguration.MinDateShiftOffsetDays - 1 // -366
-            };
-
-            var ex = Assert.Throws<AnonymizerConfigurationException>(() => config.Validate());
-            Assert.Contains("-366", ex.Message);
-            Assert.Contains("-365", ex.Message);
-            Assert.Contains("365", ex.Message);
+            Assert.Throws<AnonymizerConfigurationException>(() => config.Validate());
         }
 
         [Fact]
-        public void Validate_WhenDateShiftFixedOffsetIsAboveMax_ThrowsAnonymizerConfigurationException()
+        public void GivenEncryptKeyOf8Bytes_WhenValidate_ExceptionThrown()
         {
             var config = new ParameterConfiguration
             {
-                DateShiftFixedOffsetInDays = ParameterConfiguration.MaxDateShiftOffsetDays + 1 // +366
+                // 8 distinct ASCII chars = 64 bits, not a valid AES key size.
+                // Must NOT be all-same-character (would trigger SecurityException, not
+                // AnonymizerConfigurationException, so the Assert.Throws would fail).
+                EncryptKey = "abcdefgh"
             };
-
-            var ex = Assert.Throws<AnonymizerConfigurationException>(() => config.Validate());
-            Assert.Contains("366", ex.Message);
-            Assert.Contains("-365", ex.Message);
-            Assert.Contains("365", ex.Message);
+            Assert.Throws<AnonymizerConfigurationException>(() => config.Validate());
         }
 
         [Fact]
-        public void Validate_WhenDateShiftFixedOffsetIsLargeNegative_ThrowsAnonymizerConfigurationException()
+        public void GivenNullEncryptKey_WhenValidate_NoExceptionThrown()
         {
             var config = new ParameterConfiguration
             {
-                DateShiftFixedOffsetInDays = int.MinValue
+                EncryptKey = null
             };
-
-            var ex = Assert.Throws<AnonymizerConfigurationException>(() => config.Validate());
-            Assert.Contains(int.MinValue.ToString(), ex.Message);
-            Assert.Contains("-365", ex.Message);
-            Assert.Contains("365", ex.Message);
+            config.Validate(); // should not throw
         }
 
         [Fact]
-        public void Validate_WhenDateShiftFixedOffsetIsLargePositive_ThrowsAnonymizerConfigurationException()
+        public void GivenEmptyEncryptKey_WhenValidate_NoExceptionThrown()
         {
             var config = new ParameterConfiguration
             {
-                DateShiftFixedOffsetInDays = int.MaxValue
+                EncryptKey = string.Empty
             };
-
-            var ex = Assert.Throws<AnonymizerConfigurationException>(() => config.Validate());
-            Assert.Contains(int.MaxValue.ToString(), ex.Message);
-            Assert.Contains("-365", ex.Message);
-            Assert.Contains("365", ex.Message);
-        }
-
-        [Theory]
-        [InlineData(-366)]
-        [InlineData(-1000)]
-        [InlineData(366)]
-        [InlineData(1000)]
-        public void Validate_WhenDateShiftFixedOffsetIsOutOfRange_ThrowsAnonymizerConfigurationException(int offset)
-        {
-            var config = new ParameterConfiguration
-            {
-                DateShiftFixedOffsetInDays = offset
-            };
-
-            var ex = Assert.Throws<AnonymizerConfigurationException>(() => config.Validate());
-            Assert.Contains(offset.ToString(), ex.Message);
-            Assert.Contains("-365", ex.Message);
-            Assert.Contains("365", ex.Message);
-        }
-
-        // -----------------------------------------------------------------------
-        // Constants sanity checks
-        // -----------------------------------------------------------------------
-
-        [Fact]
-        public void Constants_MinAndMaxDateShiftOffset_HaveExpectedValues()
-        {
-            Assert.Equal(-365, ParameterConfiguration.MinDateShiftOffsetDays);
-            Assert.Equal(365, ParameterConfiguration.MaxDateShiftOffsetDays);
+            config.Validate(); // should not throw
         }
     }
 }
