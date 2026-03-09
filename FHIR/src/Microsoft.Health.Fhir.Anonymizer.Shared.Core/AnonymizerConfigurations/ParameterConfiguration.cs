@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Runtime.Serialization;
 using System.Security;
 using Microsoft.Extensions.Logging;
+using Microsoft.Health.Fhir.Anonymizer.Core.Exceptions;
 using Newtonsoft.Json.Linq;
 
 namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
@@ -11,6 +12,16 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
     public class ParameterConfiguration
     {
         private static readonly ILogger s_logger = AnonymizerLogging.CreateLogger<ParameterConfiguration>();
+
+        /// <summary>
+        /// Minimum allowed value for <see cref="DateShiftFixedOffsetInDays"/> (inclusive).
+        /// </summary>
+        public const int MinDateShiftOffsetDays = -365;
+
+        /// <summary>
+        /// Maximum allowed value for <see cref="DateShiftFixedOffsetInDays"/> (inclusive).
+        /// </summary>
+        public const int MaxDateShiftOffsetDays = 365;
 
         /// <summary>
         /// Dangerous placeholder patterns that must be rejected
@@ -42,6 +53,12 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
         [DataMember(Name = "dateShiftScope")]
         public DateShiftScope DateShiftScope { get; set; }
 
+        /// <summary>
+        /// Optional fixed date-shift offset in days. When set, overrides the deterministic
+        /// key-based date shift. Must be in the range [<see cref="MinDateShiftOffsetDays"/>,
+        /// <see cref="MaxDateShiftOffsetDays"/>] (i.e. -365 to +365). When null the
+        /// cryptographic key-based shift is used instead.
+        /// </summary>
         [DataMember(Name = "dateShiftFixedOffsetInDays")]
         public int? DateShiftFixedOffsetInDays { get; set; }
 
@@ -88,6 +105,9 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
             ValidateKeyParameter(EncryptKey, "encryptKey", "encryption");
             ValidateKeyParameter(DateShiftKey, "dateShiftKey", "date shift");
 
+            // Validate fixed date-shift offset range
+            ValidateDateShiftFixedOffsetInDays();
+
             // Validate differential privacy settings
             if (DifferentialPrivacySettings != null)
             {
@@ -98,6 +118,29 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
             if (KAnonymitySettings != null)
             {
                 ValidateKAnonymitySettings(KAnonymitySettings);
+            }
+        }
+
+        /// <summary>
+        /// Validate that <see cref="DateShiftFixedOffsetInDays"/>, when provided, falls within
+        /// the allowed range [<see cref="MinDateShiftOffsetDays"/>, <see cref="MaxDateShiftOffsetDays"/>].
+        /// A null value is always valid — it simply means the key-based shift will be used.
+        /// </summary>
+        private void ValidateDateShiftFixedOffsetInDays()
+        {
+            if (!DateShiftFixedOffsetInDays.HasValue)
+            {
+                return;
+            }
+
+            int offset = DateShiftFixedOffsetInDays.Value;
+            if (offset < MinDateShiftOffsetDays || offset > MaxDateShiftOffsetDays)
+            {
+                throw new AnonymizerConfigurationException(
+                    $"The dateShiftFixedOffsetInDays value {offset} is out of the allowed range " +
+                    $"[{MinDateShiftOffsetDays}, {MaxDateShiftOffsetDays}]. " +
+                    "Provide a value between -365 and 365 days, or omit the setting to use the " +
+                    "deterministic key-based date shift.");
             }
         }
 
