@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using Hl7.FhirPath;
 using Microsoft.Extensions.Logging;
@@ -70,10 +70,10 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
                 }
             }
 
-            // Delegate all parameter-level validation (including AES key-size check,
-            // placeholder detection, and weak-key detection) to ParameterConfiguration.Validate().
-            // This closes the split-validation gap: any code path that calls this validator
-            // automatically receives the same checks as code that calls Validate() directly.
+            // null ParameterConfiguration is valid by design: it means no global parameters are
+            // configured and all parameter-level validation (AES key size, placeholder detection,
+            // date-shift offset range) is intentionally skipped. This is NOT an oversight.
+            // See: Fail-Secure principle — missing configuration is safer than invalid configuration.
             config.ParameterConfiguration?.Validate();
         }
     }

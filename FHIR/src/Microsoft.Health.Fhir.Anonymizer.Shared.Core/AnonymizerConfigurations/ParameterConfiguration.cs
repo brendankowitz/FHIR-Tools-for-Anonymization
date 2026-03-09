@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.Serialization;
 using System.Security;
-using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Logging;
 using Microsoft.Health.Fhir.Anonymizer.Core.Exceptions;
@@ -14,6 +13,21 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
     public class ParameterConfiguration
     {
         private static readonly ILogger s_logger = AnonymizerLogging.CreateLogger<ParameterConfiguration>();
+
+        /// <summary>
+        /// The minimum allowed value for <see cref="DateShiftFixedOffsetInDays"/> (-365 days).
+        /// </summary>
+        public const int MinDateShiftOffsetDays = -365;
+
+        /// <summary>
+        /// The maximum allowed value for <see cref="DateShiftFixedOffsetInDays"/> (+365 days).
+        /// </summary>
+        public const int MaxDateShiftOffsetDays = 365;
+
+        /// <summary>
+        /// Valid AES key sizes in bits. Used to validate EncryptKey without allocating an Aes instance.
+        /// </summary>
+        private static readonly HashSet<int> s_validAesKeySizeBits = new HashSet<int> { 128, 192, 256 };
 
         /// <summary>
         /// Dangerous placeholder patterns that must be rejected
@@ -45,6 +59,12 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
         [DataMember(Name = "dateShiftScope")]
         public DateShiftScope DateShiftScope { get; set; }
 
+        /// <summary>
+        /// Optional fixed date-shift offset in days. When set, overrides the deterministic
+        /// key-based date shift. Must be in the range [<see cref="MinDateShiftOffsetDays"/>,
+        /// <see cref="MaxDateShiftOffsetDays"/>] (i.e. -365 to +365). When null the
+        /// cryptographic key-based shift is used instead.
+        /// </summary>
         [DataMember(Name = "dateShiftFixedOffsetInDays")]
         public int? DateShiftFixedOffsetInDays { get; set; }
 
@@ -92,6 +112,9 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
             ValidateEncryptKeySize(EncryptKey);
             ValidateKeyParameter(DateShiftKey, "dateShiftKey", "date shift");
 
+            // Validate fixed date-shift offset range
+            ValidateDateShiftFixedOffsetInDays();
+
             // Validate differential privacy settings
             if (DifferentialPrivacySettings != null)
             {
@@ -102,6 +125,29 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
             if (KAnonymitySettings != null)
             {
                 ValidateKAnonymitySettings(KAnonymitySettings);
+            }
+        }
+
+        /// <summary>
+        /// Validate that <see cref="DateShiftFixedOffsetInDays"/>, when provided, falls within
+        /// the allowed range [<see cref="MinDateShiftOffsetDays"/>, <see cref="MaxDateShiftOffsetDays"/>].
+        /// A null value is always valid — it simply means the key-based shift will be used.
+        /// </summary>
+        private void ValidateDateShiftFixedOffsetInDays()
+        {
+            if (!DateShiftFixedOffsetInDays.HasValue)
+            {
+                return;
+            }
+
+            int offset = DateShiftFixedOffsetInDays.Value;
+            if (offset < MinDateShiftOffsetDays || offset > MaxDateShiftOffsetDays)
+            {
+                throw new AnonymizerConfigurationException(
+                    $"The dateShiftFixedOffsetInDays value {offset} is out of the allowed range " +
+                    $"[{MinDateShiftOffsetDays}, {MaxDateShiftOffsetDays}]. " +
+                    "Provide a value between -365 and 365 days, or omit the setting to use the " +
+                    "deterministic key-based date shift.");
             }
         }
 
@@ -171,7 +217,8 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
 
         /// <summary>
         /// Validate that the encrypt key size is a valid AES key size (128, 192, or 256 bits).
-        /// Only called when EncryptKey is non-null and non-empty.
+        /// Uses a static HashSet of valid sizes to avoid allocating an Aes instance on every call.
+        /// Only validates when encryptKey is non-null and non-empty.
         /// </summary>
         private static void ValidateEncryptKeySize(string encryptKey)
         {
@@ -180,38 +227,12 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
                 return;
             }
 
-            using Aes aes = Aes.Create();
             var encryptKeySize = Encoding.UTF8.GetByteCount(encryptKey) * 8;
-            if (!IsValidKeySize(encryptKeySize, aes.LegalKeySizes))
+            if (!s_validAesKeySizeBits.Contains(encryptKeySize))
             {
                 throw new AnonymizerConfigurationException(
                     $"Invalid encrypt key size : {encryptKeySize} bits! Please provide key sizes of 128, 192 or 256 bits.");
             }
-        }
-
-        /// <summary>
-        /// Returns whether a given bit length is a valid AES key size.
-        /// validSizes for AES: MinSize=128, MaxSize=256, SkipSize=64
-        /// </summary>
-        private static bool IsValidKeySize(int bitLength, KeySizes[] validSizes)
-        {
-            if (validSizes == null)
-            {
-                return false;
-            }
-
-            for (int i = 0; i < validSizes.Length; i++)
-            {
-                for (int j = validSizes[i].MinSize; j <= validSizes[i].MaxSize; j += validSizes[i].SkipSize)
-                {
-                    if (j == bitLength)
-                    {
-                        return true;
-                    }
-                }
-            }
-
-            return false;
         }
 
         /// <summary>
