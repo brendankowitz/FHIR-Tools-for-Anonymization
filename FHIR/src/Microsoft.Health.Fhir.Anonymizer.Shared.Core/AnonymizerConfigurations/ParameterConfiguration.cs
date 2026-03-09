@@ -1,1 +1,1 @@
-Updated ValidateDateShiftKeyForScope to also enforce key requirement for DateShiftScope.Resource (in addition to File and Folder), and updated the XML docstring to reflect the new behavior.
+already applied — double /// <summary> tag on s_validAesKeySizeBits fixed
