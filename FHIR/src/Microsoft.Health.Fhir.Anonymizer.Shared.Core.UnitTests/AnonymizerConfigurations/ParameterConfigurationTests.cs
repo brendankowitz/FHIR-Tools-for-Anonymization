@@ -8,7 +8,7 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.AnonymizerConfiguratio
     public class ParameterConfigurationTests
     {
         // -----------------------------------------------------------------------
-        // DateShiftFixedOffsetInDays validation tests
+        // DateShiftFixedOffsetInDays — valid cases (should NOT throw)
         // -----------------------------------------------------------------------
 
         [Fact]
@@ -18,7 +18,9 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.AnonymizerConfiguratio
             {
                 DateShiftFixedOffsetInDays = null
             };
-            config.Validate(); // null is always valid; key-based shift will be used
+
+            // Should not throw — null means "use key-based shift"
+            config.Validate();
         }
 
         [Fact]
@@ -28,6 +30,7 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.AnonymizerConfiguratio
             {
                 DateShiftFixedOffsetInDays = 0
             };
+
             config.Validate();
         }
 
@@ -36,8 +39,9 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.AnonymizerConfiguratio
         {
             var config = new ParameterConfiguration
             {
-                DateShiftFixedOffsetInDays = ParameterConfiguration.MinDateShiftOffsetDays
+                DateShiftFixedOffsetInDays = ParameterConfiguration.MinDateShiftOffsetDays // -365
             };
+
             config.Validate();
         }
 
@@ -46,33 +50,43 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.AnonymizerConfiguratio
         {
             var config = new ParameterConfiguration
             {
-                DateShiftFixedOffsetInDays = ParameterConfiguration.MaxDateShiftOffsetDays
+                DateShiftFixedOffsetInDays = ParameterConfiguration.MaxDateShiftOffsetDays // +365
             };
+
             config.Validate();
         }
 
         [Theory]
-        [InlineData(-100)]
+        [InlineData(-364)]
         [InlineData(-1)]
         [InlineData(1)]
-        [InlineData(100)]
+        [InlineData(364)]
         public void Validate_WhenDateShiftFixedOffsetIsWithinRange_DoesNotThrow(int offset)
         {
             var config = new ParameterConfiguration
             {
                 DateShiftFixedOffsetInDays = offset
             };
+
             config.Validate();
         }
+
+        // -----------------------------------------------------------------------
+        // DateShiftFixedOffsetInDays — invalid cases (should throw)
+        // -----------------------------------------------------------------------
 
         [Fact]
         public void Validate_WhenDateShiftFixedOffsetIsBelowMin_ThrowsAnonymizerConfigurationException()
         {
             var config = new ParameterConfiguration
             {
-                DateShiftFixedOffsetInDays = ParameterConfiguration.MinDateShiftOffsetDays - 1
+                DateShiftFixedOffsetInDays = ParameterConfiguration.MinDateShiftOffsetDays - 1 // -366
             };
-            Assert.Throws<AnonymizerConfigurationException>(() => config.Validate());
+
+            var ex = Assert.Throws<AnonymizerConfigurationException>(() => config.Validate());
+            Assert.Contains("-366", ex.Message);
+            Assert.Contains("-365", ex.Message);
+            Assert.Contains("365", ex.Message);
         }
 
         [Fact]
@@ -80,9 +94,13 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.AnonymizerConfiguratio
         {
             var config = new ParameterConfiguration
             {
-                DateShiftFixedOffsetInDays = ParameterConfiguration.MaxDateShiftOffsetDays + 1
+                DateShiftFixedOffsetInDays = ParameterConfiguration.MaxDateShiftOffsetDays + 1 // +366
             };
-            Assert.Throws<AnonymizerConfigurationException>(() => config.Validate());
+
+            var ex = Assert.Throws<AnonymizerConfigurationException>(() => config.Validate());
+            Assert.Contains("366", ex.Message);
+            Assert.Contains("-365", ex.Message);
+            Assert.Contains("365", ex.Message);
         }
 
         [Fact]
@@ -90,9 +108,13 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.AnonymizerConfiguratio
         {
             var config = new ParameterConfiguration
             {
-                DateShiftFixedOffsetInDays = -1000
+                DateShiftFixedOffsetInDays = int.MinValue
             };
-            Assert.Throws<AnonymizerConfigurationException>(() => config.Validate());
+
+            var ex = Assert.Throws<AnonymizerConfigurationException>(() => config.Validate());
+            Assert.Contains(int.MinValue.ToString(), ex.Message);
+            Assert.Contains("-365", ex.Message);
+            Assert.Contains("365", ex.Message);
         }
 
         [Fact]
@@ -100,24 +122,36 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.AnonymizerConfiguratio
         {
             var config = new ParameterConfiguration
             {
-                DateShiftFixedOffsetInDays = 1000
+                DateShiftFixedOffsetInDays = int.MaxValue
             };
-            Assert.Throws<AnonymizerConfigurationException>(() => config.Validate());
+
+            var ex = Assert.Throws<AnonymizerConfigurationException>(() => config.Validate());
+            Assert.Contains(int.MaxValue.ToString(), ex.Message);
+            Assert.Contains("-365", ex.Message);
+            Assert.Contains("365", ex.Message);
         }
 
         [Theory]
         [InlineData(-366)]
-        [InlineData(-500)]
+        [InlineData(-1000)]
         [InlineData(366)]
-        [InlineData(500)]
+        [InlineData(1000)]
         public void Validate_WhenDateShiftFixedOffsetIsOutOfRange_ThrowsAnonymizerConfigurationException(int offset)
         {
             var config = new ParameterConfiguration
             {
                 DateShiftFixedOffsetInDays = offset
             };
-            Assert.Throws<AnonymizerConfigurationException>(() => config.Validate());
+
+            var ex = Assert.Throws<AnonymizerConfigurationException>(() => config.Validate());
+            Assert.Contains(offset.ToString(), ex.Message);
+            Assert.Contains("-365", ex.Message);
+            Assert.Contains("365", ex.Message);
         }
+
+        // -----------------------------------------------------------------------
+        // Constants sanity checks
+        // -----------------------------------------------------------------------
 
         [Fact]
         public void Constants_MinAndMaxDateShiftOffset_HaveExpectedValues()
@@ -126,90 +160,93 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.AnonymizerConfiguratio
             Assert.Equal(365, ParameterConfiguration.MaxDateShiftOffsetDays);
         }
 
+        [Fact]
+        public void Constants_MinCryptoHashKeyLength_HasExpectedValue()
+        {
+            Assert.Equal(32, ParameterConfiguration.MinCryptoHashKeyLength);
+        }
+
         // -----------------------------------------------------------------------
-        // EncryptKey size validation tests
+        // CryptoHashKey — whitespace-only (should throw SecurityException)
+        // -----------------------------------------------------------------------
+
+        [Theory]
+        [InlineData(" ")]       // single space
+        [InlineData("\t")]      // tab
+        [InlineData("   ")]     // multiple spaces
+        [InlineData(" \t \n ")] // mixed whitespace
+        public void TestValidate_CryptoHashKey_WhitespaceOnly_ThrowsSecurityException(string key)
+        {
+            var config = new ParameterConfiguration
+            {
+                CryptoHashKey = key
+            };
+
+            Assert.Throws<SecurityException>(() => config.Validate());
+        }
+
+        // -----------------------------------------------------------------------
+        // CryptoHashKey — below minimum length (should throw SecurityException)
         // -----------------------------------------------------------------------
 
         [Fact]
-        public void GivenEncryptKeyOf16Bytes_WhenValidate_NoExceptionThrown()
+        public void TestValidate_CryptoHashKey_BelowMinimum_ThrowsSecurityException()
         {
+            // 31 distinct characters — passes the placeholder and weak-key checks but
+            // fails the hard 32-character minimum length requirement.
+            // NOTE: a short all-same-character key (e.g. "aaa...") would be caught by
+            // the weak-key check (all-same-char pattern) before reaching the length check.
+            const string thirtyOneCharKey = "abcdefghijklmnopqrstuvwxyz12345"; // 31 chars
+            Assert.Equal(31, thirtyOneCharKey.Length);
+
             var config = new ParameterConfiguration
             {
-                // 16 distinct ASCII chars = 128 bits, valid AES key size.
-                // Must NOT be all-same-character (would trigger the weak-key guard).
-                EncryptKey = "abcdefghijklmnop"
+                CryptoHashKey = thirtyOneCharKey
             };
-            config.Validate(); // should not throw
+
+            var ex = Assert.Throws<SecurityException>(() => config.Validate());
+            Assert.Contains("31", ex.Message);
+            Assert.Contains("32", ex.Message);
         }
 
-        [Fact]
-        public void GivenEncryptKeyOf24Bytes_WhenValidate_NoExceptionThrown()
-        {
-            var config = new ParameterConfiguration
-            {
-                // 24 distinct ASCII chars = 192 bits, valid AES key size.
-                EncryptKey = "abcdefghijklmnopqrstuvwx"
-            };
-            config.Validate(); // should not throw
-        }
+        // -----------------------------------------------------------------------
+        // CryptoHashKey — at minimum length (should NOT throw)
+        // -----------------------------------------------------------------------
 
         [Fact]
-        public void GivenEncryptKeyOf32Bytes_WhenValidate_NoExceptionThrown()
+        public void TestValidate_CryptoHashKey_AtMinimum_DoesNotThrow()
         {
+            // Exactly 32 characters composed of distinct characters to avoid weak-key detection.
+            const string thirtyTwoCharKey = "abcdefghijklmnopqrstuvwxyz123456"; // 32 chars
+            Assert.Equal(32, thirtyTwoCharKey.Length);
+
             var config = new ParameterConfiguration
             {
-                // 32 distinct ASCII chars = 256 bits, valid AES key size.
-                EncryptKey = "abcdefghijklmnopqrstuvwxyz012345"
+                CryptoHashKey = thirtyTwoCharKey
             };
-            config.Validate(); // should not throw
+
+            // Should not throw — exactly meets the minimum length requirement.
+            config.Validate();
         }
 
-        [Fact]
-        public void GivenEncryptKeyOf20Bytes_WhenValidate_ExceptionThrown()
-        {
-            var config = new ParameterConfiguration
-            {
-                // Same 20-char key used in configuration-invalid-encryptkey.json.
-                // 20 bytes = 160 bits, not a valid AES key size.
-                // This string uses mixed digits (not all-same-character), so the
-                // weak-key check is NOT triggered — only the key-size check fires,
-                // giving us a predictable AnonymizerConfigurationException.
-                EncryptKey = "01234567890123456789"
-            };
-            Assert.Throws<AnonymizerConfigurationException>(() => config.Validate());
-        }
+        // -----------------------------------------------------------------------
+        // CryptoHashKey — above minimum length (should NOT throw)
+        // -----------------------------------------------------------------------
 
         [Fact]
-        public void GivenEncryptKeyOf8Bytes_WhenValidate_ExceptionThrown()
+        public void TestValidate_CryptoHashKey_AboveMinimum_DoesNotThrow()
         {
-            var config = new ParameterConfiguration
-            {
-                // 8 distinct ASCII chars = 64 bits, not a valid AES key size.
-                // Must NOT be all-same-character (would trigger SecurityException, not
-                // AnonymizerConfigurationException, so the Assert.Throws would fail).
-                EncryptKey = "abcdefgh"
-            };
-            Assert.Throws<AnonymizerConfigurationException>(() => config.Validate());
-        }
+            // 40 characters — comfortably above the 32-character minimum.
+            const string fortyCharKey = "abcdefghijklmnopqrstuvwxyz1234567890abcd"; // 40 chars
+            Assert.Equal(40, fortyCharKey.Length);
 
-        [Fact]
-        public void GivenNullEncryptKey_WhenValidate_NoExceptionThrown()
-        {
             var config = new ParameterConfiguration
             {
-                EncryptKey = null
+                CryptoHashKey = fortyCharKey
             };
-            config.Validate(); // should not throw
-        }
 
-        [Fact]
-        public void GivenEmptyEncryptKey_WhenValidate_NoExceptionThrown()
-        {
-            var config = new ParameterConfiguration
-            {
-                EncryptKey = string.Empty
-            };
-            config.Validate(); // should not throw
+            // Should not throw — exceeds the minimum length requirement.
+            config.Validate();
         }
     }
 }

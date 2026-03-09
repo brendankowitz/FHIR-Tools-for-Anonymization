@@ -107,3 +107,50 @@ You can use the Azure PowerShell to create a Data Factory and a pipeline to anon
 #### Prepare azure storage resource container
 
 Create a source and a destination container on your blob store. Upload your FHIR files to the source blob container. The pipeline will read the files from the source container and upload the anonymized files to the destination container.
+
+## Data anonymization algorithms
+
+The anonymization tool supports several methods for de-identifying FHIR data elements. The two cryptographic methods — `cryptoHash` and `encrypt` — require keys that meet specific security requirements.
+
+### cryptoHash
+
+Replaces a value with its HMAC-SHA256 hash, keyed with the value of `cryptoHashKey` in the parameters section of the configuration file. The output is a consistent, one-way pseudonym that preserves referential integrity across records.
+
+### encrypt
+
+Encrypts a value using AES in CBC mode with the key specified by `encryptKey` in the parameters section. The encrypted value is Base64-encoded. Encryption is reversible given the key, which can be useful when the data owner needs to re-identify records later.
+
+### Key Requirements
+
+To ensure adequate cryptographic security, the following key constraints are enforced at configuration load time. Violations cause a `SecurityException` to be thrown, preventing anonymous data from being produced with weak keys.
+
+| Setting | Requirement | Notes |
+| ------- | ----------- | ----- |
+| `cryptoHashKey` | ≥ 32 characters (non-whitespace) | Shorter keys provide insufficient entropy for HMAC-SHA256; whitespace-only values are rejected |
+| `encryptKey` | Exactly 16, 24, or 32 bytes (128, 192, or 256-bit AES) | The key is interpreted as UTF-8; Base64-encoded keys are recommended |
+
+#### Generating a secure key
+
+Use a cryptographically secure random number generator to create keys. The following command produces a 32-byte (256-bit) random key encoded as Base64, suitable for both `cryptoHashKey` and a 256-bit `encryptKey`:
+
+```bash
+openssl rand -base64 32
+```
+
+Other options:
+
+```powershell
+# Windows PowerShell
+[Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Minimum 0 -Maximum 256 }))
+```
+
+```csharp
+// .NET
+var key = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
+```
+
+> **Security best practices**
+> - Never commit actual keys to version control.
+> - Use environment variables or a secrets manager (Azure Key Vault, AWS Secrets Manager, HashiCorp Vault) to inject keys at runtime.
+> - Use different keys for different environments (development / staging / production).
+> - Rotate keys periodically according to your organization's security policy.

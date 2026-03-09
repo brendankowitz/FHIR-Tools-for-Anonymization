@@ -15,17 +15,25 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
         private static readonly ILogger s_logger = AnonymizerLogging.CreateLogger<ParameterConfiguration>();
 
         /// <summary>
-        /// The minimum allowed value for <see cref="DateShiftFixedOffsetInDays"/> (-365 days).
+        /// Minimum allowed value for <see cref="DateShiftFixedOffsetInDays"/> (inclusive).
         /// </summary>
         public const int MinDateShiftOffsetDays = -365;
 
         /// <summary>
-        /// The maximum allowed value for <see cref="DateShiftFixedOffsetInDays"/> (+365 days).
+        /// Maximum allowed value for <see cref="DateShiftFixedOffsetInDays"/> (inclusive).
         /// </summary>
         public const int MaxDateShiftOffsetDays = 365;
 
         /// <summary>
+        /// Minimum required length (in characters) for <see cref="CryptoHashKey"/>.
+        /// Keys shorter than this value do not provide adequate entropy for HMAC-SHA256.
+        /// </summary>
+        public const int MinCryptoHashKeyLength = 32;
+
+        /// <summary>
+        /// <summary>
         /// Valid AES key sizes in bits. Used to validate EncryptKey without allocating an Aes instance.
+        /// AES supports 128-bit (16 bytes), 192-bit (24 bytes), and 256-bit (32 bytes) keys.
         /// </summary>
         private static readonly HashSet<int> s_validAesKeySizeBits = new HashSet<int> { 128, 192, 256 };
 
@@ -68,6 +76,12 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
         [DataMember(Name = "dateShiftFixedOffsetInDays")]
         public int? DateShiftFixedOffsetInDays { get; set; }
 
+        /// <summary>
+        /// Key used for HMAC-SHA256 cryptographic hashing of identifiers.
+        /// Must be ≥ <see cref="MinCryptoHashKeyLength"/> characters (non-whitespace) to ensure
+        /// adequate entropy. Whitespace-only values are rejected. Generate a secure key using:
+        ///   openssl rand -base64 32
+        /// </summary>
         [DataMember(Name = "cryptoHashKey")]
         public string CryptoHashKey { get; set; }
 
@@ -109,8 +123,23 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
             // SECURITY: Check for placeholder cryptographic keys
             ValidateKeyParameter(CryptoHashKey, "cryptoHashKey", "cryptographic hash");
             ValidateKeyParameter(EncryptKey, "encryptKey", "encryption");
-            ValidateEncryptKeySize(EncryptKey);
             ValidateKeyParameter(DateShiftKey, "dateShiftKey", "date shift");
+
+            // SECURITY: Enforce minimum length for CryptoHashKey
+            if (!string.IsNullOrWhiteSpace(CryptoHashKey) && CryptoHashKey.Trim().Length < MinCryptoHashKeyLength)
+            {
+                throw new SecurityException(
+                    $"SECURITY ERROR: The cryptoHashKey is too short ({CryptoHashKey.Trim().Length} characters). " +
+                    $"A minimum of {MinCryptoHashKeyLength} characters is required to ensure adequate entropy for " +
+                    "HMAC-SHA256 operations.\n\n" +
+                    "TO GENERATE A SECURE KEY:\n" +
+                    "  Linux/macOS:   openssl rand -base64 32\n" +
+                    "  Windows:       pwsh -Command \"[Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Minimum 0 -Maximum 256 }))\"\n" +
+                    "  .NET:          var key = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));");
+            }
+
+            // SECURITY: Validate EncryptKey is a valid AES key size (128/192/256 bits)
+            ValidateEncryptKeySize(EncryptKey);
 
             // Validate fixed date-shift offset range
             ValidateDateShiftFixedOffsetInDays();
@@ -125,6 +154,26 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
             if (KAnonymitySettings != null)
             {
                 ValidateKAnonymitySettings(KAnonymitySettings);
+            }
+        }
+
+        /// <summary>
+        /// Validate that the encrypt key size is a valid AES key size (128, 192, or 256 bits).
+        /// Uses a static HashSet of valid sizes to avoid allocating an Aes instance on every call.
+        /// Only validates when encryptKey is non-null and non-empty.
+        /// </summary>
+        private static void ValidateEncryptKeySize(string encryptKey)
+        {
+            if (string.IsNullOrEmpty(encryptKey))
+            {
+                return;
+            }
+
+            var encryptKeySize = Encoding.UTF8.GetByteCount(encryptKey) * 8;
+            if (!s_validAesKeySizeBits.Contains(encryptKeySize))
+            {
+                throw new AnonymizerConfigurationException(
+                    $"Invalid encrypt key size : {encryptKeySize} bits! Please provide key sizes of 128, 192 or 256 bits.");
             }
         }
 
@@ -152,14 +201,23 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
         }
 
         /// <summary>
-        /// Validate a key parameter doesn't contain placeholder values.
-        /// SECURITY CRITICAL: Prevents use of example/template keys in production.
+        /// Validate a key parameter doesn't contain placeholder values or consist solely of whitespace.
+        /// SECURITY CRITICAL: Prevents use of example/template keys and whitespace-only values in production.
         /// </summary>
         private void ValidateKeyParameter(string keyValue, string parameterName, string keyType)
         {
             if (string.IsNullOrEmpty(keyValue))
             {
-                return; // Empty keys are allowed if the feature is not used
+                return; // Empty/null keys are allowed if the feature is not used
+            }
+
+            // SECURITY: Reject whitespace-only keys — they provide no entropy
+            if (string.IsNullOrWhiteSpace(keyValue))
+            {
+                throw new SecurityException(
+                    $"SECURITY ERROR: Whitespace-only {keyType} key detected in '{parameterName}'. " +
+                    "A key consisting entirely of whitespace characters provides no entropy and must not be used. " +
+                    "Generate a cryptographically secure random key using: openssl rand -base64 32");
             }
 
             // Trim and convert to uppercase for case-insensitive comparison
@@ -212,26 +270,6 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
                     $"SECURITY ERROR: Weak {keyType} key detected in '{parameterName}'. " +
                     "The key appears to be a common weak value (e.g., 'password', '12345678', repeated characters). " +
                     "Generate a cryptographically secure random key using: openssl rand -base64 32");
-            }
-        }
-
-        /// <summary>
-        /// Validate that the encrypt key size is a valid AES key size (128, 192, or 256 bits).
-        /// Uses a static HashSet of valid sizes to avoid allocating an Aes instance on every call.
-        /// Only validates when encryptKey is non-null and non-empty.
-        /// </summary>
-        private static void ValidateEncryptKeySize(string encryptKey)
-        {
-            if (string.IsNullOrEmpty(encryptKey))
-            {
-                return;
-            }
-
-            var encryptKeySize = Encoding.UTF8.GetByteCount(encryptKey) * 8;
-            if (!s_validAesKeySizeBits.Contains(encryptKeySize))
-            {
-                throw new AnonymizerConfigurationException(
-                    $"Invalid encrypt key size : {encryptKeySize} bits! Please provide key sizes of 128, 192 or 256 bits.");
             }
         }
 
