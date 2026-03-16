@@ -112,7 +112,7 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
 
         /// <summary>
         /// Validate configuration for security issues and placeholder values.
-        /// 
+        ///
         /// SECURITY: Rejects dangerous placeholder values that should never be used in production.
         /// This prevents accidental use of example/template configurations with insecure dummy keys.
         /// Throws SecurityException for placeholder keys to ensure fail-secure behavior.
@@ -276,21 +276,28 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
         }
 
         /// <summary>
-        /// Validate that a DateShiftKey is present when DateShiftScope is File or Folder
-        /// and no fixed offset is configured as an alternative.
-        /// File and Folder scopes require a deterministic key to produce consistent shifts across
-        /// all resources in the same file or folder. Resource scope (the default) allows a
-        /// randomly-generated key because each resource shifts independently.
+        /// Validate that a non-empty DateShiftKey is present for ALL DateShiftScope values
+        /// (Resource, File, and Folder) when DateShiftFixedOffsetInDays is not set.
+        ///
+        /// SECURITY: Resource scope also requires a key because the HMAC-based date shift uses
+        /// (resourceId + dateShiftKey) as its input. Without a key, the shift is determined solely
+        /// by the resource ID, which is often predictable or publicly known (e.g., in FHIR bundles
+        /// or EHR systems). An attacker who knows the resource ID can recompute the shift and
+        /// reverse the date offset — enabling re-identification. A secret key prevents this.
+        ///
+        /// File and Folder scopes additionally require a key for consistency: all resources
+        /// in the same file or folder must receive the same deterministic shift.
         /// </summary>
         private void ValidateDateShiftKeyForScope()
         {
-            if ((DateShiftScope == DateShiftScope.File ||
-                 DateShiftScope == DateShiftScope.Folder) &&
-                string.IsNullOrEmpty(DateShiftKey) &&
+            // Use a local variable to avoid ambiguity between the property name and the enum type name.
+            var scope = this.DateShiftScope;
+
+            if (string.IsNullOrEmpty(DateShiftKey) &&
                 !DateShiftFixedOffsetInDays.HasValue)
             {
                 throw new AnonymizerConfigurationException(
-                    $"A dateShiftKey is required when dateShiftScope is '{DateShiftScope}' and dateShiftFixedOffsetInDays is not set. " +
+                    $"A dateShiftKey is required when dateShiftScope is '{scope}' and dateShiftFixedOffsetInDays is not set. " +
                     "Provide a non-empty dateShiftKey, or set dateShiftFixedOffsetInDays to use a fixed date-shift offset instead.");
             }
         }
@@ -316,8 +323,8 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
             {
                 s_logger.LogWarning(
                     $"Differential privacy epsilon value {settings.Epsilon} is high (>1.0). " +
-                    "This provides weaker privacy guarantees. Consider using epsilon ≤ 1.0 for moderate privacy " +
-                    "or epsilon ≤ 0.1 for strong privacy (NIST SP 800-188 guidance for health data).");
+                    "This provides weaker privacy guarantees. Consider using epsilon <= 1.0 for moderate privacy " +
+                    "or epsilon <= 0.1 for strong privacy (NIST SP 800-188 guidance for health data).");
             }
 
             if (settings.Delta < 0 || settings.Delta > 1)
@@ -351,7 +358,7 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
             if (settings.KValue == 2)
             {
                 s_logger.LogWarning(
-                    "K-anonymity k-value is 2 (minimal). Consider k ≥ 5 for better privacy protection " +
+                    "K-anonymity k-value is 2 (minimal). Consider k >= 5 for better privacy protection " +
                     "(recommended by HIPAA Safe Harbor guidance).");
             }
 
@@ -391,10 +398,11 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
         /// Defines how values should be generalized to achieve k-anonymity.
         /// </summary>
         [DataMember(Name = "generalizationHierarchies")]
-        public Dictionary<string, JObject> GeneralizationHierarchies { get; set; }
+        public Dictionary<string, object> GeneralizationHierarchies { get; set; }
 
         /// <summary>
-        /// Suppression threshold: if more than this percentage of records need suppression, emit warning.
+        /// Suppression threshold (0.0-1.0). Records that cannot be generalized to meet
+        /// k-anonymity within this fraction of the dataset will be suppressed (removed).
         /// Default: 0.3 (30%). High suppression rates indicate data utility loss.
         /// </summary>
         [DataMember(Name = "suppressionThreshold")]
@@ -403,7 +411,7 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
 
     /// <summary>
     /// Configuration parameters for differential privacy processing.
-    /// 
+    ///
     /// REFERENCES:
     /// - NIST Special Publication 800-188: "De-Identifying Government Datasets" (2023 Draft)
     ///   https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-188-draft2.pdf
@@ -417,74 +425,56 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
     {
         /// <summary>
         /// Privacy budget (epsilon) - lower values provide stronger privacy.
-        /// 
+        ///
         /// GUIDANCE (NIST SP 800-188):
         /// - ε ≤ 0.1: Strong privacy protection (recommended for sensitive health data)
         /// - ε = 0.5-1.0: Moderate privacy (reasonable for many applications)
         /// - ε = 1.0-10.0: Weak privacy (use only when data utility is critical)
         /// - ε > 10: Minimal privacy guarantee
-        /// 
-        /// DEFAULT: 0.1 (strong privacy)
-        /// 
-        /// WARNING: Epsilon values accumulate across queries via sequential composition.
-        /// Total privacy loss = sum of all epsilon values consumed.
+        ///
+        /// DEFAULT: 1.0 (reasonable starting point; adjust based on sensitivity analysis)
         /// </summary>
         [DataMember(Name = "epsilon")]
-        public double Epsilon { get; set; } = 0.1;
+        public double Epsilon { get; set; } = 1.0;
 
         /// <summary>
-        /// Failure probability (delta) - probability that privacy guarantee fails.
-        /// 
+        /// Delta parameter for (epsilon, delta)-differential privacy.
+        /// Represents the probability of privacy failure. Should be cryptographically small.
+        ///
         /// GUIDANCE:
         /// - For (ε,δ)-differential privacy, δ should be much smaller than 1/n where n is dataset size
-        /// - Typical values: 1e-5 to 1e-10
-        /// - Smaller delta = stronger privacy guarantee
+        /// - Typical values: 1e-5 to 1e-8 for healthcare datasets
+        /// - δ = 0 gives pure ε-differential privacy (Laplace mechanism)
         /// - Only applies to Gaussian mechanism; Laplace mechanism has δ=0
-        /// 
-        /// DEFAULT: 1e-5
+        ///
+        /// DEFAULT: 1e-5 (appropriate for datasets of up to ~100,000 records)
         /// </summary>
         [DataMember(Name = "delta")]
         public double Delta { get; set; } = 1e-5;
 
         /// <summary>
-        /// Global sensitivity for the query/transformation.
-        /// Maximum change in output from adding/removing one record.
-        /// 
+        /// Sensitivity of the query function (global sensitivity).
+        /// Measures the maximum change in output when one record is added/removed.
+        ///
         /// GUIDANCE:
         /// - For counting queries: sensitivity = 1
-        /// - For sum queries on bounded values [min, max]: sensitivity = max - min
-        /// - For mean/average: typically 1-10 depending on data range
+        /// - For sum queries: sensitivity = max possible value
+        /// - For average queries: sensitivity = range / n
         /// - Higher sensitivity requires more noise for same epsilon
-        /// 
+        ///
         /// DEFAULT: 1.0 (appropriate for counts and bounded numeric fields)
         /// </summary>
         [DataMember(Name = "sensitivity")]
         public double Sensitivity { get; set; } = 1.0;
 
         /// <summary>
-        /// Noise mechanism to use for differential privacy.
-        /// 
-        /// MECHANISMS:
-        /// - "laplace": Laplace mechanism (ε-DP, δ=0). Standard choice for numeric queries.
-        ///   Noise scale = sensitivity/ε. Use for unbounded queries.
-        /// - "gaussian": Gaussian mechanism ((ε,δ)-DP). Use when approximate DP is acceptable.
-        ///   Requires δ > 0. Better utility for large datasets. Use for L2-sensitivity queries.
-        /// - "exponential": Exponential mechanism. For categorical/selection queries.
-        ///   Currently implemented using Laplace for numeric data.
-        /// 
-        /// DEFAULT: "laplace" (provides pure ε-differential privacy)
-        /// </summary>
-        [DataMember(Name = "mechanism")]
-        public string Mechanism { get; set; } = "laplace";
-
-        /// <summary>
         /// Maximum cumulative epsilon budget before warning.
-        /// 
+        ///
         /// COMPOSITION: Under sequential composition, total privacy loss is sum of individual ε values.
         /// Advanced composition theorems can provide tighter bounds but are not yet implemented.
-        /// 
+        ///
         /// DEFAULT: 1.0 (reasonable for most healthcare research applications per NIST guidance)
-        /// 
+        ///
         /// WARNING: Exceeding this budget across multiple queries degrades privacy guarantees.
         /// </summary>
         [DataMember(Name = "maxCumulativeEpsilon")]
@@ -492,19 +482,65 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
 
         /// <summary>
         /// Whether to use advanced composition for better privacy accounting.
-        /// 
+        ///
         /// ADVANCED COMPOSITION THEOREM (Dwork et al.):
         /// k queries with (ε,δ)-DP satisfy (ε', kδ+δ')-DP where:
         /// ε' ≈ √(2k ln(1/δ')) * ε + k*ε*(e^ε - 1)
-        /// 
+        ///
         /// This can significantly improve privacy accounting for many queries.
-        /// 
+        ///
         /// DEFAULT: false (uses simple sequential composition: total ε = Σε_i)
-        /// 
+        ///
         /// NOTE: Advanced composition is not yet implemented. Setting this to true will
         /// log a warning and fall back to sequential composition.
         /// </summary>
         [DataMember(Name = "useAdvancedComposition")]
         public bool UseAdvancedComposition { get; set; } = false;
+
+        /// <summary>
+        /// Noise mechanism to use for differential privacy.
+        ///
+        /// MECHANISMS:
+        /// - "laplace": Laplace mechanism (ε-DP, δ=0). Standard choice for numeric queries.
+        ///   Noise scale = sensitivity/ε. Use for unbounded queries.
+        /// - "gaussian": Gaussian mechanism ((ε,δ)-DP). Use when approximate DP is acceptable.
+        ///   Requires δ > 0. Better utility for large datasets. Use for L2-sensitivity queries.
+        /// - "exponential": Exponential mechanism. For categorical/selection queries.
+        ///   Currently implemented using Laplace for numeric data.
+        ///
+        /// DEFAULT: "laplace" (provides pure ε-differential privacy)
+        /// </summary>
+        [DataMember(Name = "mechanism")]
+        public string Mechanism { get; set; } = "laplace";
+
+        /// <summary>
+        /// Maximum cumulative epsilon budget before warning.
+        ///
+        /// COMPOSITION: Under sequential composition, total privacy loss is sum of individual ε values.
+        /// Advanced composition theorems can provide tighter bounds but are not yet implemented.
+        ///
+        /// DEFAULT: 1.0 (reasonable for most healthcare research applications per NIST guidance)
+        ///
+        /// WARNING: Exceeding this budget across multiple queries degrades privacy guarantees.
+        /// </summary>
+        [DataMember(Name = "privacyBudgetTrackingEnabled")]
+        public bool PrivacyBudgetTrackingEnabled { get; set; } = false;
+
+        /// <summary>
+        /// Whether to use advanced composition for better privacy accounting.
+        ///
+        /// ADVANCED COMPOSITION THEOREM (Dwork et al.):
+        /// k queries with (ε,δ)-DP satisfy (ε', kδ+δ')-DP where:
+        /// ε' ≈ √(2k ln(1/δ')) * ε + k*ε*(e^ε - 1)
+        ///
+        /// This can significantly improve privacy accounting for many queries.
+        ///
+        /// DEFAULT: false (uses simple sequential composition: total ε = Σε_i)
+        ///
+        /// NOTE: Advanced composition is not yet implemented. Setting this to true will
+        /// log a warning and fall back to sequential composition.
+        /// </summary>
+        [DataMember(Name = "clippingEnabled")]
+        public bool ClippingEnabled { get; set; } = false;
     }
 }
