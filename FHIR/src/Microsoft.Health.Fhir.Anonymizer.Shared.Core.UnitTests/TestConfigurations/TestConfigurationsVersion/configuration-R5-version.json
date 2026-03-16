@@ -12,7 +12,7 @@
     }
   ],
   "parameters": {
-    "dateShiftKey": "",
+    "dateShiftKey": "unit-test-date-shift-key-32char",
     "cryptoHashKey": "",
     "encryptKey": ""
   }

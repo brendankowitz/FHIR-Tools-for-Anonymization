@@ -1,4 +1,4 @@
-﻿{
+{
   "fhirPathRules": [
     {
       "path": "Patient.nodesByType('HumanName')",
@@ -23,7 +23,7 @@
 
   ],
   "parameters": {
-    "dateShiftKey": "",
+    "dateShiftKey": "unit-test-date-shift-key-32char",
     "cryptoHashKey": "",
     "enablePartialAgesForRedact": true,
     "enablePartialDatesForRedact": true,

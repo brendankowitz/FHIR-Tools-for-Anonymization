@@ -1,44 +1,17 @@
-﻿{
-  "fhirVersion": "",
+{
+  "fhirVersion": "R4",
   "fhirPathRules": [
-    {
-      "path": "Patient.nodesByType('HumanName')",
-      "method": "redact"
-    },
-    {
-      "path": "TestResource",
-      "method": "redact"
-    },
-    {
-      "path": "nodesByType('HumanName')",
-      "method": "redact"
-    },
-    {
-      "path": "Resource",
-      "method": "keep"
-    }
+    {"path": "nodesByType('Extension')", "method": "keep"},
+    {"path": "Resource.id", "method": "encrypt"},
+    {"path": "nodesByType('date')", "method": "dateshift"}
   ],
   "parameters": {
-    "dateShiftKey": "",
-    "encryptKey": "01234567890123456789",
+    "dateShiftKey": "unit-test-date-shift-key-32char",
+    "dateShiftScope": "resource",
+    "cryptoHashKey": "",
+    "encryptKey": "invalidkey",
     "enablePartialAgesForRedact": true,
     "enablePartialDatesForRedact": true,
-    "enablePartialZipCodesForRedact": true,
-    "restrictedZipCodeTabulationAreas": [
-      "036",
-      "059",
-      "102",
-      "203",
-      "205",
-      "369",
-      "556",
-      "692",
-      "821",
-      "823",
-      "878",
-      "879",
-      "884",
-      "893"
-    ]
+    "enablePartialZipCodesForRedact": true
   }
 }

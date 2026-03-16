@@ -1,49 +1,23 @@
-﻿{
-  "fhirVersion": "",
-  "processingErrors": "raise",
+{
+  "fhirVersion": "R4",
   "fhirPathRules": [
-    {
-      "path": "Patient.nodesByType('HumanName')",
-      "method": "redact"
-    },
-    {
-      "path": "TestResource",
-      "method": "redact"
-    },
-    {
-      "path": "nodesByType('HumanName')",
-      "method": "redact"
-    },
-    {
-      "path": "Resource",
-      "method": "keep"
-    },
-    {
-      "path": "Device.where(id.exists()).id",
-      "method": "keep"
-    }
+    {"path": "nodesByType('Extension')", "method": "keep"},
+    {"path": "Resource.id", "method": "cryptoHash"},
+    {"path": "nodesByType('Reference').reference", "method": "cryptoHash"},
+    {"path": "nodesByType('date')", "method": "dateshift"},
+    {"path": "nodesByType('dateTime')", "method": "dateshift"},
+    {"path": "nodesByType('instant')", "method": "dateshift"},
+    {"path": "nodesByType('Address')", "method": "redact"},
+    {"path": "nodesByType('HumanName')", "method": "redact"},
+    {"path": "nodesByType('ContactPoint')", "method": "redact"}
   ],
   "parameters": {
-    "dateShiftKey": "",
+    "dateShiftKey": "unit-test-date-shift-key-32char",
+    "dateShiftScope": "resource",
     "cryptoHashKey": "",
+    "encryptKey": "",
     "enablePartialAgesForRedact": true,
     "enablePartialDatesForRedact": true,
-    "enablePartialZipCodesForRedact": true,
-    "restrictedZipCodeTabulationAreas": [
-      "036",
-      "059",
-      "102",
-      "203",
-      "205",
-      "369",
-      "556",
-      "692",
-      "821",
-      "823",
-      "878",
-      "879",
-      "884",
-      "893"
-    ]
+    "enablePartialZipCodesForRedact": true
   }
 }

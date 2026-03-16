@@ -1,4 +1,4 @@
-﻿{
+{
   "fhirVersion": "",
   "fhirPathRules": [
     {
@@ -21,10 +21,9 @@
       "path": "Device.where(id.exists()).id",
       "method": "keep"
     }
-
   ],
   "parameters": {
-    "dateShiftKey": "",
+    "dateShiftKey": "unit-test-date-shift-key-32char",
     "cryptoHashKey": "",
     "enablePartialAgesForRedact": true,
     "enablePartialDatesForRedact": true,
