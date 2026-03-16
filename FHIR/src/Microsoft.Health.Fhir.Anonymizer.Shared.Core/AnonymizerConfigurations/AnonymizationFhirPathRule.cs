@@ -8,10 +8,10 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
     public class AnonymizationFhirPathRule : AnonymizerRule
     {
         // Example: nodesByType('Patient').use
-        public static readonly Regex TypeRuleRegex = new Regex(@"^nodesByType\([\'|\"](?<type>[A-Za-z0-9]+)[\'|\"]\)(\.(?<expression>[A-Za-z0-9]+))?$");
+        public static readonly Regex TypeRuleRegex = new Regex(@"^nodesByType\(['""](?<type>[A-Za-z0-9]+)['""]\)(\.(?<expression>[A-Za-z0-9]+))?$");
 
         // Example: nodesByName("telecom").value
-        public static readonly Regex NameRuleRegex = new Regex(@"^nodesByName\([\'|\"](?<name>[A-Za-z0-9]+)[\'|\"]\)(\.(?<expression>[A-Za-z0-9]+))?$");
+        public static readonly Regex NameRuleRegex = new Regex(@"^nodesByName\(['""](?<name>[A-Za-z0-9]+)['""]\)(\.(?<expression>[A-Za-z0-9]+))?$");
 
         // Example: descendants().ofType(HumanName)
         public static readonly Regex DescendantsOfTypeRuleRegex = new Regex(@"^descendants\(\)\.ofType\((?<type>[A-Za-z0-9]+)\)$");
