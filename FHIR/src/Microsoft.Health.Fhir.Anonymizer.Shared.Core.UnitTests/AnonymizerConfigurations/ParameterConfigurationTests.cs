@@ -256,7 +256,7 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.AnonymizerConfiguratio
         }
 
         // -----------------------------------------------------------------------
-        // DateShiftKey + DateShiftScope validation — new tests
+        // DateShiftKey + DateShiftScope validation
         // -----------------------------------------------------------------------
 
         /// <summary>
