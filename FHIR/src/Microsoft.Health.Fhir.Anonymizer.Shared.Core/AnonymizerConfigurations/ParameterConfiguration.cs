@@ -9,6 +9,13 @@ using Newtonsoft.Json.Linq;
 
 namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
 {
+    /// <summary>
+    /// Top-level configuration object that controls all anonymization method parameters.
+    /// Covers date-shifting (HMAC-based and fixed-offset), cryptographic hashing, AES encryption,
+    /// redaction (with optional partial-data retention for ages, dates, and ZIP codes),
+    /// k-anonymity post-processing, differential privacy noise injection, and arbitrary
+    /// extension settings for custom processors.
+    /// </summary>
     [DataContract]
     public class ParameterConfiguration
     {
@@ -60,9 +67,25 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
             "FIXME"
         };
 
+        /// <summary>
+        /// Secret key used for HMAC-based deterministic date shifting.
+        /// Combined with the resource, file, or folder identifier (according to
+        /// <see cref="DateShiftScope"/>) to produce a consistent, reproducible date offset
+        /// for each unique identifier. Must not be a placeholder or whitespace-only value.
+        /// </summary>
         [DataMember(Name = "dateShiftKey")]
         public string DateShiftKey { get; set; }
 
+        /// <summary>
+        /// Granularity scope at which the date-shift offset is held constant.
+        /// <list type="bullet">
+        ///   <item><description><c>Resource</c> – each resource receives its own deterministic offset derived from its ID and <see cref="DateShiftKey"/>.</description></item>
+        ///   <item><description><c>File</c> – all resources in the same input file share a single offset.</description></item>
+        ///   <item><description><c>Folder</c> – all resources in the same folder share a single offset.</description></item>
+        /// </list>
+        /// Narrower scopes (Resource) maximise per-record randomness; wider scopes (Folder)
+        /// preserve temporal relationships across records processed together.
+        /// </summary>
         [DataMember(Name = "dateShiftScope")]
         public DateShiftScope DateShiftScope { get; set; }
 
@@ -84,30 +107,91 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
         [DataMember(Name = "cryptoHashKey")]
         public string CryptoHashKey { get; set; }
 
+        /// <summary>
+        /// AES symmetric encryption key used by the <c>encrypt</c> anonymization method.
+        /// The key must encode to exactly 16, 24, or 32 UTF-8 bytes, corresponding to
+        /// AES-128, AES-192, and AES-256 respectively. Keys of any other length are
+        /// rejected during <see cref="Validate"/>. Generate a 256-bit key with:
+        ///   openssl rand -base64 32
+        /// </summary>
         [DataMember(Name = "encryptKey")]
         public string EncryptKey { get; set; }
 
+        /// <summary>
+        /// When <see langword="true"/>, ages 90 and above are fully redacted while ages
+        /// below 90 are retained as-is, following the HIPAA Safe Harbor de-identification
+        /// standard which treats ages ≥ 90 as a direct identifier.
+        /// When <see langword="false"/> (default), all age values are redacted.
+        /// </summary>
         [DataMember(Name = "enablePartialAgesForRedact")]
         public bool EnablePartialAgesForRedact { get; set; }
 
+        /// <summary>
+        /// When <see langword="true"/>, only the year component of a date value is
+        /// retained during redaction; month and day are removed. This preserves limited
+        /// temporal utility while reducing re-identification risk.
+        /// When <see langword="false"/> (default), date values are fully redacted.
+        /// </summary>
         [DataMember(Name = "enablePartialDatesForRedact")]
         public bool EnablePartialDatesForRedact { get; set; }
 
+        /// <summary>
+        /// When <see langword="true"/>, the first three digits of a ZIP code are retained
+        /// during redaction, unless the prefix appears in
+        /// <see cref="RestrictedZipCodeTabulationAreas"/>, in which case the entire ZIP
+        /// code is redacted. This aligns with HIPAA Safe Harbor, which permits the
+        /// 3-digit prefix for geographic areas with a population ≥ 20,000.
+        /// When <see langword="false"/> (default), ZIP codes are fully redacted.
+        /// </summary>
         [DataMember(Name = "enablePartialZipCodesForRedact")]
         public bool EnablePartialZipCodesForRedact { get; set; }
 
+        /// <summary>
+        /// List of 3-digit ZIP code prefixes (ZIP Code Tabulation Areas) that must be
+        /// fully redacted because the corresponding geographic area has a population of
+        /// fewer than 20,000 people, per HIPAA Safe Harbor §164.514(b)(2)(i).
+        /// Only evaluated when <see cref="EnablePartialZipCodesForRedact"/> is
+        /// <see langword="true"/>.
+        /// </summary>
         [DataMember(Name = "restrictedZipCodeTabulationAreas")]
         public List<string> RestrictedZipCodeTabulationAreas { get; set; }
 
+        /// <summary>
+        /// Optional configuration for k-anonymity post-processing. When set, the engine
+        /// enforces that every combination of quasi-identifier values appears in at least
+        /// <see cref="KAnonymityParameterConfiguration.KValue"/> records, suppressing or
+        /// generalizing records that cannot satisfy the constraint.
+        /// When <see langword="null"/> (default), k-anonymity post-processing is disabled.
+        /// </summary>
         [DataMember(Name = "kAnonymitySettings")]
         public KAnonymityParameterConfiguration KAnonymitySettings { get; set; }
 
+        /// <summary>
+        /// Optional configuration for differential privacy noise injection. When set, the
+        /// engine adds calibrated random noise to numeric fields according to the specified
+        /// <see cref="DifferentialPrivacyParameterConfiguration.Epsilon"/> and
+        /// <see cref="DifferentialPrivacyParameterConfiguration.Mechanism"/> parameters.
+        /// When <see langword="null"/> (default), differential privacy is disabled.
+        /// </summary>
         [DataMember(Name = "differentialPrivacySettings")]
         public DifferentialPrivacyParameterConfiguration DifferentialPrivacySettings { get; set; }
 
+        /// <summary>
+        /// Extension point for tool-specific or experimental settings, stored as an
+        /// arbitrary JSON object. The anonymizer engine does not interpret this field;
+        /// it is passed through as-is to custom processors that may inspect it.
+        /// Use this to attach metadata or feature flags without modifying the core schema.
+        /// </summary>
         [DataMember(Name = "customSettings")]
         public JObject CustomSettings { get; set; }
 
+        /// <summary>
+        /// Optional prefix prepended to the resource (or file/folder) identifier before
+        /// HMAC computation during date shifting. Useful for namespace isolation when the
+        /// same <see cref="DateShiftKey"/> is reused across multiple datasets: setting a
+        /// distinct prefix per dataset ensures that identical resource IDs in different
+        /// datasets produce different date-shift offsets.
+        /// </summary>
         public string DateShiftKeyPrefix { get; set; }
 
         /// <summary>
@@ -514,31 +598,23 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
         public string Mechanism { get; set; } = "laplace";
 
         /// <summary>
-        /// Maximum cumulative epsilon budget before warning.
-        ///
-        /// COMPOSITION: Under sequential composition, total privacy loss is sum of individual ε values.
-        /// Advanced composition theorems can provide tighter bounds but are not yet implemented.
-        ///
-        /// DEFAULT: 1.0 (reasonable for most healthcare research applications per NIST guidance)
-        ///
-        /// WARNING: Exceeding this budget across multiple queries degrades privacy guarantees.
+        /// When <see langword="true"/>, the engine tracks cumulative epsilon usage across
+        /// all differential privacy operations and emits a warning when the total exceeds
+        /// <see cref="MaxCumulativeEpsilon"/>. This helps operators stay within their
+        /// overall privacy budget when multiple fields are independently perturbed.
+        /// When <see langword="false"/> (default), no budget tracking is performed.
         /// </summary>
         [DataMember(Name = "privacyBudgetTrackingEnabled")]
         public bool PrivacyBudgetTrackingEnabled { get; set; } = false;
 
         /// <summary>
-        /// Whether to use advanced composition for better privacy accounting.
-        ///
-        /// ADVANCED COMPOSITION THEOREM (Dwork et al.):
-        /// k queries with (ε,δ)-DP satisfy (ε', kδ+δ')-DP where:
-        /// ε' ≈ √(2k ln(1/δ')) * ε + k*ε*(e^ε - 1)
-        ///
-        /// This can significantly improve privacy accounting for many queries.
-        ///
-        /// DEFAULT: false (uses simple sequential composition: total ε = Σε_i)
-        ///
-        /// NOTE: Advanced composition is not yet implemented. Setting this to true will
-        /// log a warning and fall back to sequential composition.
+        /// When <see langword="true"/>, input values are clipped to a bounded range before
+        /// noise is added. Clipping is required to bound the sensitivity of the query
+        /// function, which is a prerequisite for the Gaussian mechanism to provide
+        /// meaningful (ε,δ)-differential privacy guarantees. The clipping bounds are
+        /// derived from the configured <see cref="Sensitivity"/>.
+        /// When <see langword="false"/> (default), values are not clipped prior to noise
+        /// injection.
         /// </summary>
         [DataMember(Name = "clippingEnabled")]
         public bool ClippingEnabled { get; set; } = false;
