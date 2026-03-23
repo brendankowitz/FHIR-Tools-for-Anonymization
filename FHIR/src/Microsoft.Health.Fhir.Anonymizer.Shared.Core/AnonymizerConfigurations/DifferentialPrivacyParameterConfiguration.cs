@@ -1,0 +1,1 @@
+See disk - Added UseAdvancedComposition warning, mechanism validation, Gaussian+Delta=0 validation

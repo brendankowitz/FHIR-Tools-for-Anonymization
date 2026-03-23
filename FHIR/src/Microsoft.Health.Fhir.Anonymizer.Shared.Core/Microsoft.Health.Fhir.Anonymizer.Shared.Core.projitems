@@ -21,7 +21,10 @@
     <Compile Include="$(MSBuildThisFileDirectory)AnonymizerConfigurations\AnonymizerRule.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)AnonymizerConfigurations\AnonymizerRuleType.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)AnonymizerConfigurations\AnonymizerSettings.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)AnonymizerConfigurations\CryptographicKeyValidator.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)AnonymizerConfigurations\DateShiftScope.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)AnonymizerConfigurations\DifferentialPrivacyParameterConfiguration.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)AnonymizerConfigurations\KAnonymityParameterConfiguration.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)AnonymizerConfigurations\ParameterConfiguration.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)AnonymizerConfigurationManager.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)AnonymizerEngine.cs" />
