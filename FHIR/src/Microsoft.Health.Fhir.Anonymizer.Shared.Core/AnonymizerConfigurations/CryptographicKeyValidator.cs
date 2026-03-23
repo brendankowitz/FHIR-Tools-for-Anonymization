@@ -17,7 +17,7 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
     /// </summary>
     public static class CryptographicKeyValidator
     {
-        private static readonly ILogger s_logger = AnonymizerLogging.CreateLogger<ParameterConfiguration>();
+        private static readonly ILogger s_logger = AnonymizerLogging.LoggerFactory.CreateLogger(typeof(CryptographicKeyValidator).FullName);
 
         /// <summary>
         /// Valid AES key sizes in bits. Used to validate EncryptKey without allocating an Aes instance.

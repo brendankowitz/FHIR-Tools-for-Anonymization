@@ -111,21 +111,26 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
         public string Mechanism { get; set; } = "laplace";
 
         /// <summary>
-        /// Whether to track and enforce cumulative privacy budget across queries.
-        /// When enabled, the system monitors total epsilon spend and warns when approaching
-        /// <see cref="MaxCumulativeEpsilon"/>.
-        ///
-        /// DEFAULT: false (budget tracking disabled)
+        /// When <see langword="true"/>, the engine tracks cumulative epsilon usage across
+        /// all differential privacy operations and emits a warning when the total epsilon
+        /// spend across operations exceeds <see cref="MaxCumulativeEpsilon"/>. This helps
+        /// operators stay within their overall privacy budget when multiple fields are
+        /// independently perturbed.
+        /// When <see langword="false"/> (default), no budget tracking is performed.
         /// </summary>
         [DataMember(Name = "privacyBudgetTrackingEnabled")]
         public bool PrivacyBudgetTrackingEnabled { get; set; } = false;
 
         /// <summary>
-        /// Whether to clip input values to a bounded range before adding noise.
-        /// Clipping limits the sensitivity of queries to a known maximum, which can
-        /// improve the privacy-utility tradeoff for bounded data.
-        ///
-        /// DEFAULT: false (clipping disabled)
+        /// When <see langword="true"/>, input values are clipped to a bounded range before
+        /// noise is added. Clipping bounds the sensitivity of the query function, which is
+        /// a prerequisite for the Gaussian mechanism to provide meaningful
+        /// (ε,δ)-differential privacy guarantees. Without clipping, the Gaussian mechanism
+        /// may not satisfy its theoretical privacy bounds because unbounded inputs produce
+        /// unbounded sensitivity. The clipping range is derived from the configured
+        /// <see cref="Sensitivity"/>.
+        /// When <see langword="false"/> (default), values are not clipped prior to noise
+        /// injection.
         /// </summary>
         [DataMember(Name = "clippingEnabled")]
         public bool ClippingEnabled { get; set; } = false;
