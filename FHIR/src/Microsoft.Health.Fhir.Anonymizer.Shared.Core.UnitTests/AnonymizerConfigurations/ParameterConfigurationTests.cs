@@ -256,16 +256,17 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.AnonymizerConfiguratio
         }
 
         // -----------------------------------------------------------------------
-        // DateShiftKey + DateShiftScope validation — new tests
+        // DateShiftKey + DateShiftScope validation
         // -----------------------------------------------------------------------
 
         /// <summary>
-        /// Resource scope is the default enum value (0). An auto-generated random key is
-        /// acceptable for Resource scope because each resource shifts independently.
-        /// No exception should be thrown when the key is absent.
+        /// Resource scope requires a dateShiftKey when dateShiftFixedOffsetInDays is not set.
+        /// The implementation enforces this for ALL scopes (Resource, File, Folder) to prevent
+        /// re-identification attacks. An empty key with no fixed offset must throw.
+        /// See ParameterConfiguration.ValidateDateShiftKeyForScope() for the enforcing production code.
         /// </summary>
         [Fact]
-        public void Validate_ResourceScopeWithEmptyDateShiftKeyAndNoFixedOffset_DoesNotThrow()
+        public void Validate_ResourceScopeWithEmptyDateShiftKeyAndNoFixedOffset_ThrowsAnonymizerConfigurationException()
         {
             var config = new ParameterConfiguration
             {
@@ -274,17 +275,20 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.AnonymizerConfiguratio
                 DateShiftFixedOffsetInDays = null
             };
 
-            // Resource scope allows auto-generated key — no exception expected
-            config.Validate();
+            // SECURITY: Resource scope requires a key when no fixed offset is set.
+            // The implementation throws for ALL scopes to prevent predictable date shifts.
+            // See ParameterConfiguration.ValidateDateShiftKeyForScope()
+            var ex = Assert.Throws<AnonymizerConfigurationException>(() => config.Validate());
+            Assert.Contains("dateShiftKey", ex.Message);
         }
 
         /// <summary>
-        /// Resource scope is the default enum value (0). An auto-generated random key is
-        /// acceptable for Resource scope because each resource shifts independently.
-        /// No exception should be thrown when the key is null.
+        /// Resource scope requires a dateShiftKey when dateShiftFixedOffsetInDays is not set.
+        /// A null key with no fixed offset must throw for all scopes including Resource.
+        /// See ParameterConfiguration.ValidateDateShiftKeyForScope() for the enforcing production code.
         /// </summary>
         [Fact]
-        public void Validate_ResourceScopeWithNullDateShiftKeyAndNoFixedOffset_DoesNotThrow()
+        public void Validate_ResourceScopeWithNullDateShiftKeyAndNoFixedOffset_ThrowsAnonymizerConfigurationException()
         {
             var config = new ParameterConfiguration
             {
@@ -293,7 +297,32 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.AnonymizerConfiguratio
                 DateShiftFixedOffsetInDays = null
             };
 
-            // Resource scope allows auto-generated key — no exception expected
+            // SECURITY: Resource scope requires a key when no fixed offset is set.
+            // The implementation throws for ALL scopes to prevent predictable date shifts.
+            // See ParameterConfiguration.ValidateDateShiftKeyForScope()
+            var ex = Assert.Throws<AnonymizerConfigurationException>(() => config.Validate());
+            Assert.Contains("dateShiftKey", ex.Message);
+        }
+
+        /// <summary>
+        /// Resource scope with a valid (non-empty) dateShiftKey and no fixed offset must NOT throw.
+        /// This confirms that the validation is not overly restrictive and only rejects
+        /// configurations where the key is actually missing.
+        /// See ParameterConfiguration.ValidateDateShiftKeyForScope() for the enforcing production code.
+        /// </summary>
+        [Fact]
+        public void Validate_ResourceScopeWithValidDateShiftKey_DoesNotThrow()
+        {
+            // 32-character key — meets length requirements; no fixed offset forces key-based shifting.
+            const string validKey = "abcdefghijklmnopqrstuvwxyz123456"; // 32 chars
+            var config = new ParameterConfiguration
+            {
+                DateShiftScope = DateShiftScope.Resource,
+                DateShiftKey = validKey,
+                DateShiftFixedOffsetInDays = null
+            };
+
+            // Should NOT throw — a valid key is present; key-based date shifting is fully configured.
             config.Validate();
         }
 
