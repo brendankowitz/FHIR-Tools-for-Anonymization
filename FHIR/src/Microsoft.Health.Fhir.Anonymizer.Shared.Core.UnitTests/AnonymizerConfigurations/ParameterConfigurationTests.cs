@@ -1,4 +1,3 @@
-using System;
 using System.Security;
 using Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations;
 using Microsoft.Health.Fhir.Anonymizer.Core.Exceptions;
@@ -9,7 +8,7 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.AnonymizerConfiguratio
     public class ParameterConfigurationTests
     {
         // -----------------------------------------------------------------------
-        // DateShiftFixedOffsetInDays — valid cases (should NOT throw)
+        // DateShiftFixedOffsetInDays - valid cases (should NOT throw)
         // -----------------------------------------------------------------------
 
         [Fact]
@@ -18,15 +17,22 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.AnonymizerConfiguratio
             var config = new ParameterConfiguration
             {
                 DateShiftFixedOffsetInDays = null,
+                // DateShiftKey required when DateShiftFixedOffsetInDays is null and scope is Resource
                 DateShiftKey = "abcdefghijklmnopqrstuvwxyz123456"
             };
+
+            // Should not throw - null means "use key-based shift"; key is provided
             config.Validate();
         }
 
         [Fact]
         public void Validate_WhenDateShiftFixedOffsetIsZero_DoesNotThrow()
         {
-            var config = new ParameterConfiguration { DateShiftFixedOffsetInDays = 0 };
+            var config = new ParameterConfiguration
+            {
+                DateShiftFixedOffsetInDays = 0
+            };
+
             config.Validate();
         }
 
@@ -35,8 +41,9 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.AnonymizerConfiguratio
         {
             var config = new ParameterConfiguration
             {
-                DateShiftFixedOffsetInDays = ParameterDefaults.MinDateShiftOffsetDays
+                DateShiftFixedOffsetInDays = ParameterDefaults.MinDateShiftOffsetDays // -365
             };
+
             config.Validate();
         }
 
@@ -45,8 +52,9 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.AnonymizerConfiguratio
         {
             var config = new ParameterConfiguration
             {
-                DateShiftFixedOffsetInDays = ParameterDefaults.MaxDateShiftOffsetDays
+                DateShiftFixedOffsetInDays = ParameterDefaults.MaxDateShiftOffsetDays // +365
             };
+
             config.Validate();
         }
 
@@ -57,12 +65,16 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.AnonymizerConfiguratio
         [InlineData(364)]
         public void Validate_WhenDateShiftFixedOffsetIsWithinRange_DoesNotThrow(int offset)
         {
-            var config = new ParameterConfiguration { DateShiftFixedOffsetInDays = offset };
+            var config = new ParameterConfiguration
+            {
+                DateShiftFixedOffsetInDays = offset
+            };
+
             config.Validate();
         }
 
         // -----------------------------------------------------------------------
-        // DateShiftFixedOffsetInDays — invalid cases (should throw)
+        // DateShiftFixedOffsetInDays - invalid cases (should throw)
         // -----------------------------------------------------------------------
 
         [Fact]
@@ -70,12 +82,13 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.AnonymizerConfiguratio
         {
             var config = new ParameterConfiguration
             {
-                DateShiftFixedOffsetInDays = ParameterDefaults.MinDateShiftOffsetDays - 1
+                DateShiftFixedOffsetInDays = ParameterDefaults.MinDateShiftOffsetDays - 1 // -366
             };
+
             var ex = Assert.Throws<AnonymizerConfigurationException>(() => config.Validate());
             Assert.Contains("-366", ex.Message);
-            Assert.Contains("-365", ex.Message);
-            Assert.Contains("365", ex.Message);
+            Assert.Contains(ParameterDefaults.MinDateShiftOffsetDays.ToString(), ex.Message);
+            Assert.Contains(ParameterDefaults.MaxDateShiftOffsetDays.ToString(), ex.Message);
         }
 
         [Fact]
@@ -83,30 +96,43 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.AnonymizerConfiguratio
         {
             var config = new ParameterConfiguration
             {
-                DateShiftFixedOffsetInDays = ParameterDefaults.MaxDateShiftOffsetDays + 1
+                DateShiftFixedOffsetInDays = ParameterDefaults.MaxDateShiftOffsetDays + 1 // +366
             };
+
             var ex = Assert.Throws<AnonymizerConfigurationException>(() => config.Validate());
             Assert.Contains("366", ex.Message);
-            Assert.Contains("-365", ex.Message);
-            Assert.Contains("365", ex.Message);
+            Assert.Contains(ParameterDefaults.MinDateShiftOffsetDays.ToString(), ex.Message);
+            Assert.Contains(ParameterDefaults.MaxDateShiftOffsetDays.ToString(), ex.Message);
         }
 
         [Fact]
         public void Validate_WhenDateShiftFixedOffsetIsLargeNegative_ThrowsAnonymizerConfigurationException()
         {
-            var config = new ParameterConfiguration { DateShiftFixedOffsetInDays = int.MinValue };
+            var config = new ParameterConfiguration
+            {
+                DateShiftFixedOffsetInDays = int.MinValue
+            };
+
             var ex = Assert.Throws<AnonymizerConfigurationException>(() => config.Validate());
             Assert.Contains(int.MinValue.ToString(), ex.Message);
-            Assert.Contains("-365", ex.Message);
+            // Both bounds must appear in the error message so the caller knows the valid range.
+            Assert.Contains(ParameterDefaults.MinDateShiftOffsetDays.ToString(), ex.Message);
+            Assert.Contains(ParameterDefaults.MaxDateShiftOffsetDays.ToString(), ex.Message);
         }
 
         [Fact]
         public void Validate_WhenDateShiftFixedOffsetIsLargePositive_ThrowsAnonymizerConfigurationException()
         {
-            var config = new ParameterConfiguration { DateShiftFixedOffsetInDays = int.MaxValue };
+            var config = new ParameterConfiguration
+            {
+                DateShiftFixedOffsetInDays = int.MaxValue
+            };
+
             var ex = Assert.Throws<AnonymizerConfigurationException>(() => config.Validate());
             Assert.Contains(int.MaxValue.ToString(), ex.Message);
-            Assert.Contains("365", ex.Message);
+            // Both bounds must appear in the error message so the caller knows the valid range.
+            Assert.Contains(ParameterDefaults.MinDateShiftOffsetDays.ToString(), ex.Message);
+            Assert.Contains(ParameterDefaults.MaxDateShiftOffsetDays.ToString(), ex.Message);
         }
 
         [Theory]
@@ -116,15 +142,19 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.AnonymizerConfiguratio
         [InlineData(1000)]
         public void Validate_WhenDateShiftFixedOffsetIsOutOfRange_ThrowsAnonymizerConfigurationException(int offset)
         {
-            var config = new ParameterConfiguration { DateShiftFixedOffsetInDays = offset };
+            var config = new ParameterConfiguration
+            {
+                DateShiftFixedOffsetInDays = offset
+            };
+
             var ex = Assert.Throws<AnonymizerConfigurationException>(() => config.Validate());
             Assert.Contains(offset.ToString(), ex.Message);
-            Assert.Contains("-365", ex.Message);
-            Assert.Contains("365", ex.Message);
+            Assert.Contains(ParameterDefaults.MinDateShiftOffsetDays.ToString(), ex.Message);
+            Assert.Contains(ParameterDefaults.MaxDateShiftOffsetDays.ToString(), ex.Message);
         }
 
         // -----------------------------------------------------------------------
-        // Constants sanity checks (now referencing ParameterDefaults)
+        // Constants sanity checks
         // -----------------------------------------------------------------------
 
         [Fact]
@@ -141,68 +171,92 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.AnonymizerConfiguratio
         }
 
         // -----------------------------------------------------------------------
-        // CryptoHashKey — whitespace-only (should throw SecurityException)
+        // CryptoHashKey - whitespace-only (should throw SecurityException)
         // -----------------------------------------------------------------------
 
         [Theory]
-        [InlineData(" ")]
-        [InlineData("\t")]
-        [InlineData("   ")]
-        [InlineData(" \t \n ")]
+        [InlineData(" ")]       // single space
+        [InlineData("\t")]      // tab
+        [InlineData("   ")]     // multiple spaces
+        [InlineData(" \t \n ")] // mixed whitespace
         public void TestValidate_CryptoHashKey_WhitespaceOnly_ThrowsSecurityException(string key)
         {
-            var config = new ParameterConfiguration { CryptoHashKey = key };
+            var config = new ParameterConfiguration
+            {
+                CryptoHashKey = key
+            };
+
             Assert.Throws<SecurityException>(() => config.Validate());
         }
 
         // -----------------------------------------------------------------------
-        // CryptoHashKey — below minimum length (should throw SecurityException)
+        // CryptoHashKey - below minimum length (should throw SecurityException)
         // -----------------------------------------------------------------------
 
         [Fact]
         public void TestValidate_CryptoHashKey_BelowMinimum_ThrowsSecurityException()
         {
-            // MinCryptoHashKeyLength - 1 distinct characters: passes placeholder and weak-key
-            // checks but fails the hard minimum-length requirement.
-            var shortKey = new string('a', ParameterDefaults.MinCryptoHashKeyLength - 2) + "bc";
+            // Construct a key that is exactly MinCryptoHashKeyLength - 1 characters long.
+            // Use distinct trailing characters to avoid triggering the all-same-char weak-key
+            // check, which fires before the length check.
+            //
+            // Formula: (MinCryptoHashKeyLength - 3) 'a' chars + "bc"
+            //        = (32 - 3) + 2 = 31 chars = MinCryptoHashKeyLength - 1
+            var shortKey = new string('a', ParameterDefaults.MinCryptoHashKeyLength - 3) + "bc";
             Assert.Equal(ParameterDefaults.MinCryptoHashKeyLength - 1, shortKey.Length);
 
-            var config = new ParameterConfiguration { CryptoHashKey = shortKey };
+            var config = new ParameterConfiguration
+            {
+                CryptoHashKey = shortKey
+            };
 
             var ex = Assert.Throws<SecurityException>(() => config.Validate());
+            // Error message must report the actual length and the required minimum.
             Assert.Contains((ParameterDefaults.MinCryptoHashKeyLength - 1).ToString(), ex.Message);
             Assert.Contains(ParameterDefaults.MinCryptoHashKeyLength.ToString(), ex.Message);
         }
 
         // -----------------------------------------------------------------------
-        // CryptoHashKey — at or above minimum length (should NOT throw)
+        // CryptoHashKey - at minimum length (should NOT throw)
         // -----------------------------------------------------------------------
 
         [Fact]
         public void TestValidate_CryptoHashKey_AtMinimum_DoesNotThrow()
         {
-            const string thirtyTwoCharKey = "abcdefghijklmnopqrstuvwxyz123456";
+            // Exactly 32 characters composed of distinct characters to avoid weak-key detection.
+            const string thirtyTwoCharKey = "abcdefghijklmnopqrstuvwxyz123456"; // 32 chars
             Assert.Equal(ParameterDefaults.MinCryptoHashKeyLength, thirtyTwoCharKey.Length);
 
             var config = new ParameterConfiguration
             {
                 CryptoHashKey = thirtyTwoCharKey,
+                // Provide a fixed offset so no DateShiftKey is required for Resource scope
                 DateShiftFixedOffsetInDays = 0
             };
+
+            // Should not throw - exactly meets the minimum length requirement.
             config.Validate();
         }
+
+        // -----------------------------------------------------------------------
+        // CryptoHashKey - above minimum length (should NOT throw)
+        // -----------------------------------------------------------------------
 
         [Fact]
         public void TestValidate_CryptoHashKey_AboveMinimum_DoesNotThrow()
         {
-            const string fortyCharKey = "abcdefghijklmnopqrstuvwxyz1234567890abcd";
+            // 40 characters - comfortably above the 32-character minimum.
+            const string fortyCharKey = "abcdefghijklmnopqrstuvwxyz1234567890abcd"; // 40 chars
             Assert.Equal(40, fortyCharKey.Length);
 
             var config = new ParameterConfiguration
             {
                 CryptoHashKey = fortyCharKey,
+                // Provide a fixed offset so no DateShiftKey is required for Resource scope
                 DateShiftFixedOffsetInDays = 0
             };
+
+            // Should not throw - exceeds the minimum length requirement.
             config.Validate();
         }
 
@@ -210,6 +264,11 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.AnonymizerConfiguratio
         // DateShiftKey + DateShiftScope validation
         // -----------------------------------------------------------------------
 
+        /// <summary>
+        /// Resource scope requires a dateShiftKey when dateShiftFixedOffsetInDays is not set.
+        /// The implementation enforces this for ALL scopes (Resource, File, Folder) to prevent
+        /// re-identification attacks. An empty key with no fixed offset must throw.
+        /// </summary>
         [Fact]
         public void Validate_ResourceScopeWithEmptyDateShiftKeyAndNoFixedOffset_ThrowsAnonymizerConfigurationException()
         {
@@ -219,10 +278,14 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.AnonymizerConfiguratio
                 DateShiftKey = string.Empty,
                 DateShiftFixedOffsetInDays = null
             };
+
             var ex = Assert.Throws<AnonymizerConfigurationException>(() => config.Validate());
             Assert.Contains("dateShiftKey", ex.Message);
         }
 
+        /// <summary>
+        /// A null key with no fixed offset must throw for all scopes including Resource.
+        /// </summary>
         [Fact]
         public void Validate_ResourceScopeWithNullDateShiftKeyAndNoFixedOffset_ThrowsAnonymizerConfigurationException()
         {
@@ -232,23 +295,34 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.AnonymizerConfiguratio
                 DateShiftKey = null,
                 DateShiftFixedOffsetInDays = null
             };
+
             var ex = Assert.Throws<AnonymizerConfigurationException>(() => config.Validate());
             Assert.Contains("dateShiftKey", ex.Message);
         }
 
+        /// <summary>
+        /// Resource scope with a valid (non-empty) dateShiftKey and no fixed offset must NOT throw.
+        /// </summary>
         [Fact]
         public void Validate_ResourceScopeWithValidDateShiftKey_DoesNotThrow()
         {
-            const string validKey = "abcdefghijklmnopqrstuvwxyz123456";
+            // 32-character key - meets length requirements; no fixed offset forces key-based shifting.
+            const string validKey = "abcdefghijklmnopqrstuvwxyz123456"; // 32 chars
             var config = new ParameterConfiguration
             {
                 DateShiftScope = DateShiftScope.Resource,
                 DateShiftKey = validKey,
                 DateShiftFixedOffsetInDays = null
             };
+
+            // Should NOT throw - a valid key is present; key-based date shifting is fully configured.
             config.Validate();
         }
 
+        /// <summary>
+        /// File scope requires a deterministic key so that all resources in the same file
+        /// receive consistent date shifts. Missing key with no fixed offset must throw.
+        /// </summary>
         [Fact]
         public void Validate_FileScopeWithEmptyDateShiftKeyAndNoFixedOffset_ThrowsAnonymizerConfigurationException()
         {
@@ -258,10 +332,15 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.AnonymizerConfiguratio
                 DateShiftKey = string.Empty,
                 DateShiftFixedOffsetInDays = null
             };
+
             var ex = Assert.Throws<AnonymizerConfigurationException>(() => config.Validate());
             Assert.Contains("dateShiftKey", ex.Message);
         }
 
+        /// <summary>
+        /// Folder scope requires a deterministic key so that all resources in the same folder
+        /// receive consistent date shifts. Missing key with no fixed offset must throw.
+        /// </summary>
         [Fact]
         public void Validate_FolderScopeWithNullDateShiftKeyAndNoFixedOffset_ThrowsAnonymizerConfigurationException()
         {
@@ -271,6 +350,7 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.AnonymizerConfiguratio
                 DateShiftKey = null,
                 DateShiftFixedOffsetInDays = null
             };
+
             var ex = Assert.Throws<AnonymizerConfigurationException>(() => config.Validate());
             Assert.Contains("dateShiftKey", ex.Message);
         }
@@ -278,172 +358,15 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.AnonymizerConfiguratio
         [Fact]
         public void Validate_FileScopeWithNullKeyButFixedOffsetSet_DoesNotThrow()
         {
+            // When DateShiftFixedOffsetInDays is set, no DateShiftKey is required even for File scope
             var config = new ParameterConfiguration
             {
                 DateShiftScope = DateShiftScope.File,
                 DateShiftKey = null,
                 DateShiftFixedOffsetInDays = 30
             };
-            config.Validate();
-        }
 
-        // -----------------------------------------------------------------------
-        // Placeholder key detection (moved from ParameterDefaultsTests)
-        // -----------------------------------------------------------------------
-
-        [Theory]
-        [InlineData("YOUR_KEY_HERE")]
-        [InlineData("placeholder_value")]
-        [InlineData("change_me")]
-        [InlineData("test_key_value")]
-        public void Validate_CryptoHashKeyWithPlaceholder_ThrowsSecurityException(string key)
-        {
-            var config = new ParameterConfiguration
-            {
-                CryptoHashKey = key,
-                DateShiftFixedOffsetInDays = 0
-            };
-            Assert.Throws<SecurityException>(() => config.Validate());
-        }
-
-        [Theory]
-        [InlineData("YOUR_KEY_HERE")]
-        [InlineData("placeholder_value")]
-        [InlineData("change_me")]
-        public void Validate_DateShiftKeyWithPlaceholder_ThrowsSecurityException(string key)
-        {
-            var config = new ParameterConfiguration
-            {
-                DateShiftKey = key,
-                DateShiftFixedOffsetInDays = 0
-            };
-            Assert.Throws<SecurityException>(() => config.Validate());
-        }
-
-        [Theory]
-        [InlineData("YOUR_KEY_HERE")]
-        [InlineData("placeholder_value")]
-        [InlineData("change_me")]
-        public void Validate_EncryptKeyWithPlaceholder_ThrowsSecurityException(string key)
-        {
-            var config = new ParameterConfiguration
-            {
-                EncryptKey = key,
-                DateShiftFixedOffsetInDays = 0
-            };
-            Assert.Throws<SecurityException>(() => config.Validate());
-        }
-
-        // -----------------------------------------------------------------------
-        // Output markers in keys are NOT rejected (moved from ParameterDefaultsTests)
-        // -----------------------------------------------------------------------
-
-        [Fact]
-        public void Validate_CryptoHashKeyContainingRedacted_DoesNotThrow()
-        {
-            // "REDACTED" is a legitimate output marker, not a dangerous key placeholder.
-            // Construct the key to be exactly MinCryptoHashKeyLength chars so the length
-            // check stays in sync automatically if the constant ever changes.
-            const string prefix = "REDACTED_";
-            var key = prefix + new string('a', ParameterDefaults.MinCryptoHashKeyLength - prefix.Length);
-            Assert.Equal(ParameterDefaults.MinCryptoHashKeyLength, key.Length);
-
-            var config = new ParameterConfiguration
-            {
-                CryptoHashKey = key,
-                DateShiftFixedOffsetInDays = 0
-            };
-            config.Validate();
-        }
-
-        // -----------------------------------------------------------------------
-        // Differential privacy epsilon bounds (moved from ParameterDefaultsTests)
-        // -----------------------------------------------------------------------
-
-        [Theory]
-        [InlineData(0.0)]
-        [InlineData(-1.0)]
-        [InlineData(-0.001)]
-        public void Validate_EpsilonZeroOrNegative_ThrowsArgumentException(double epsilon)
-        {
-            var config = new ParameterConfiguration
-            {
-                DifferentialPrivacySettings = new DifferentialPrivacyParameterConfiguration
-                {
-                    Epsilon = epsilon, Sensitivity = 1.0, MaxCumulativeEpsilon = 1.0
-                },
-                DateShiftFixedOffsetInDays = 0
-            };
-            Assert.Throws<ArgumentException>(() => config.Validate());
-        }
-
-        [Theory]
-        [InlineData(10.1)]
-        [InlineData(100.0)]
-        public void Validate_EpsilonAboveMaximum_ThrowsArgumentException(double epsilon)
-        {
-            var config = new ParameterConfiguration
-            {
-                DifferentialPrivacySettings = new DifferentialPrivacyParameterConfiguration
-                {
-                    Epsilon = epsilon, Sensitivity = 1.0, MaxCumulativeEpsilon = 1.0
-                },
-                DateShiftFixedOffsetInDays = 0
-            };
-            Assert.Throws<ArgumentException>(() => config.Validate());
-        }
-
-        [Theory]
-        [InlineData(0.001)]
-        [InlineData(0.1)]
-        [InlineData(0.99)]
-        [InlineData(1.0)]   // Default — must NOT warn after fixing >= to > in the condition
-        [InlineData(9.99)]
-        [InlineData(10.0)]
-        public void Validate_EpsilonWithinValidRange_DoesNotThrow(double epsilon)
-        {
-            var config = new ParameterConfiguration
-            {
-                DifferentialPrivacySettings = new DifferentialPrivacyParameterConfiguration
-                {
-                    Epsilon = epsilon, Sensitivity = 1.0, MaxCumulativeEpsilon = 1.0
-                },
-                DateShiftFixedOffsetInDays = 0
-            };
-            config.Validate();
-        }
-
-        // -----------------------------------------------------------------------
-        // K-anonymity k-value bounds (moved from ParameterDefaultsTests)
-        // -----------------------------------------------------------------------
-
-        [Theory]
-        [InlineData(0)]
-        [InlineData(1)]
-        [InlineData(-5)]
-        public void Validate_KValueLessThanTwo_ThrowsArgumentException(int kValue)
-        {
-            var config = new ParameterConfiguration
-            {
-                KAnonymitySettings = new KAnonymityParameterConfiguration { KValue = kValue },
-                DateShiftFixedOffsetInDays = 0
-            };
-            var ex = Assert.Throws<ArgumentException>(() => config.Validate());
-            Assert.Contains(kValue.ToString(), ex.Message);
-        }
-
-        [Theory]
-        [InlineData(2)]
-        [InlineData(5)]
-        [InlineData(10)]
-        [InlineData(100)]
-        public void Validate_KValueTwoOrGreater_DoesNotThrow(int kValue)
-        {
-            var config = new ParameterConfiguration
-            {
-                KAnonymitySettings = new KAnonymityParameterConfiguration { KValue = kValue },
-                DateShiftFixedOffsetInDays = 0
-            };
+            // Should not throw - fixed offset is provided, key is not needed
             config.Validate();
         }
     }

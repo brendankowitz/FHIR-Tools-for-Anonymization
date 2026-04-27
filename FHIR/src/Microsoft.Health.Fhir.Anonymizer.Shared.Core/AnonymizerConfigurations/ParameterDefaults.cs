@@ -1,104 +1,106 @@
-using System.Collections.Generic;
+using System;
 using System.Collections.Immutable;
-using System.Diagnostics;
 
 namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
 {
     /// <summary>
-    /// Central repository of default values and security constants for anonymization parameter
-    /// configuration. Shared constants referenced by configuration validation and independently testable.
+    /// Central repository for default values and constraints used across anonymization
+    /// parameter configuration. Provides compile-time constants and immutable collections
+    /// that guard against accidental mutation at runtime.
     /// </summary>
     public static class ParameterDefaults
     {
         /// <summary>
         /// Minimum allowed value for DateShiftFixedOffsetInDays (inclusive).
-        /// Aligns with HIPAA Safe Harbor §164.514(b)(2)(i) date-shifting guidance.
         /// </summary>
         public const int MinDateShiftOffsetDays = -365;
 
         /// <summary>
         /// Maximum allowed value for DateShiftFixedOffsetInDays (inclusive).
-        /// Aligns with HIPAA Safe Harbor §164.514(b)(2)(i) date-shifting guidance.
         /// </summary>
         public const int MaxDateShiftOffsetDays = 365;
 
         /// <summary>
-        /// Minimum required length (in characters) for the cryptographic hash key.
-        /// Keys shorter than this do not provide adequate entropy for HMAC-SHA256.
-        /// Generate a secure key with: openssl rand -base64 32
+        /// Minimum required length (in characters) for CryptoHashKey.
+        /// Keys shorter than this value do not provide adequate entropy for HMAC-SHA256.
         /// </summary>
         public const int MinCryptoHashKeyLength = 32;
 
         /// <summary>
-        /// Placeholder patterns indicating an insecure or template cryptographic key.
-        /// Keys matching any of these patterns must never be used in production.
-        /// A SecurityException is thrown when any pattern is detected in a key value.
-        /// <para>
-        /// All patterns are stored in uppercase. The key validation method normalizes
-        /// input via .ToUpperInvariant() before substring matching, making comparisons
-        /// effectively case-insensitive. Any new entry added here must also be uppercase.
-        /// </para>
-        /// NOTE: Does NOT include anonymization output markers ("REDACTED", "ANONYMIZED");
-        /// see <see cref="AnonymizationOutputMarkers"/>.
+        /// Dangerous placeholder patterns that must be rejected.
+        /// These are strings that commonly appear in example/template configurations
+        /// and must never be used in production anonymization operations.
+        /// Made public so external code can surface the same rejection logic without
+        /// duplicating the pattern list.
+        /// Using ImmutableArray prevents runtime mutation via casting to a mutable interface.
         /// </summary>
-        internal static readonly ImmutableArray<string> DangerousPlaceholderPatterns =
-            ImmutableArray.Create(
-                "$HMAC_KEY",
-                "YOUR_KEY_HERE",
-                "YOUR_SECURE_KEY",
-                "YOUR_ENCRYPTION_KEY",
-                "PLACEHOLDER",
-                "CHANGE_ME",
-                "CHANGEME",
-                "REPLACE_ME",
-                "EXAMPLE_KEY",
-                "TEST_KEY",
-                "SAMPLE_KEY",
-                "INSERT_KEY_HERE",
-                "<YOUR_KEY>",
-                "[YOUR_KEY]",
-                "{{YOUR_KEY}}",
-                "TODO",
-                "FIXME"
-            );
+        public static readonly ImmutableArray<string> DangerousPlaceholderPatterns = ImmutableArray.Create(
+            "$HMAC_KEY",
+            "YOUR_KEY_HERE",
+            "YOUR_SECURE_KEY",
+            "YOUR_ENCRYPTION_KEY",
+            "PLACEHOLDER",
+            "CHANGE_ME",
+            "CHANGEME",
+            "REPLACE_ME",
+            "EXAMPLE_KEY",
+            "TEST_KEY",
+            "SAMPLE_KEY",
+            "INSERT_KEY_HERE",
+            "<YOUR_KEY>",
+            "[YOUR_KEY]",
+            "{{YOUR_KEY}}",
+            "TODO",
+            "FIXME"
+        );
 
         /// <summary>
-        /// Strings used as anonymization output markers in redacted or anonymized FHIR fields.
-        /// These are legitimate output values and must NOT be confused with dangerous key placeholders.
-        /// Kept separate from <see cref="DangerousPlaceholderPatterns"/>.
+        /// Strings that may appear in anonymized output fields.
+        /// Can be used by downstream tools to detect whether a field has already been processed.
+        /// Using ImmutableArray prevents runtime mutation via casting to a mutable interface
+        /// such as IList or IReadOnlyList.
         /// </summary>
-        public static readonly IReadOnlyList<string> AnonymizationOutputMarkers = new[]
-        {
+        public static readonly ImmutableArray<string> AnonymizationOutputMarkers = ImmutableArray.Create(
             "REDACTED",
             "[REDACTED]",
             "***",
             "ANONYMIZED"
-        };
+        );
 
         /// <summary>
-        /// Valid AES key sizes in bits: 128 (16 bytes), 192 (24 bytes), 256 (32 bytes).
-        /// Used during validation to avoid allocating an Aes instance.
+        /// Static constructor validates internal consistency of the constants above.
+        /// Runs once at class initialization; any violation throws InvalidOperationException
+        /// in both Debug and Release builds, providing fail-secure behavior if the constants
+        /// are ever inadvertently changed.
         /// </summary>
-        public static readonly ImmutableHashSet<int> ValidAesKeySizeBits =
-            ImmutableHashSet.Create(128, 192, 256);
-
         static ParameterDefaults()
         {
-            // Verify no output marker is accidentally listed as a dangerous placeholder.
-            foreach (var marker in AnonymizationOutputMarkers)
+            if (MinDateShiftOffsetDays >= 0)
             {
-                Debug.Assert(
-                    !DangerousPlaceholderPatterns.Contains(marker),
-                    $"AnonymizationOutputMarkers entry '{marker}' must not appear in DangerousPlaceholderPatterns.");
+                throw new InvalidOperationException(
+                    $"ParameterDefaults invariant violation: MinDateShiftOffsetDays must be negative, " +
+                    $"but was {MinDateShiftOffsetDays}.");
             }
 
-            // Verify all dangerous placeholder patterns are stored in uppercase,
-            // enforcing the contract with the ToUpperInvariant() normalization in key validation.
-            foreach (var pattern in DangerousPlaceholderPatterns)
+            if (MaxDateShiftOffsetDays <= 0)
             {
-                Debug.Assert(
-                    pattern == pattern.ToUpperInvariant(),
-                    $"DangerousPlaceholderPatterns entry '{pattern}' is not uppercase.");
+                throw new InvalidOperationException(
+                    $"ParameterDefaults invariant violation: MaxDateShiftOffsetDays must be positive, " +
+                    $"but was {MaxDateShiftOffsetDays}.");
+            }
+
+            if (MinCryptoHashKeyLength <= 0)
+            {
+                throw new InvalidOperationException(
+                    $"ParameterDefaults invariant violation: MinCryptoHashKeyLength must be positive, " +
+                    $"but was {MinCryptoHashKeyLength}.");
+            }
+
+            if (MinDateShiftOffsetDays > MaxDateShiftOffsetDays)
+            {
+                throw new InvalidOperationException(
+                    $"ParameterDefaults invariant violation: MinDateShiftOffsetDays ({MinDateShiftOffsetDays}) " +
+                    $"must be less than or equal to MaxDateShiftOffsetDays ({MaxDateShiftOffsetDays}).");
             }
         }
     }

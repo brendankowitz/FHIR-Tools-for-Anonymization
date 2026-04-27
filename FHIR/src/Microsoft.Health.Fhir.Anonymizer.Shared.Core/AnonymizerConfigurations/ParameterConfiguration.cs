@@ -10,10 +10,11 @@ using Newtonsoft.Json.Linq;
 namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
 {
     /// <summary>
-    /// Top-level configuration object controlling all anonymization method parameters:
-    /// date-shifting (HMAC-based and fixed-offset), cryptographic hashing, AES encryption,
-    /// redaction with optional partial-data retention, k-anonymity, differential privacy,
-    /// and extension settings for custom processors.
+    /// Top-level configuration object that controls all anonymization method parameters.
+    /// Covers date-shifting (HMAC-based and fixed-offset), cryptographic hashing, AES encryption,
+    /// redaction (with optional partial-data retention for ages, dates, and ZIP codes),
+    /// k-anonymity post-processing, differential privacy noise injection, and arbitrary
+    /// extension settings for custom processors.
     /// </summary>
     [DataContract]
     public class ParameterConfiguration
@@ -21,97 +22,165 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
         private static readonly ILogger s_logger = AnonymizerLogging.CreateLogger<ParameterConfiguration>();
 
         /// <summary>
-        /// Secret key for HMAC-based deterministic date shifting.
-        /// Per HIPAA Safe Harbor §164.514(b)(2)(i), dates must be shifted by a consistent
-        /// offset derived from this key to prevent re-identification.
+        /// Minimum allowed value for <see cref="DateShiftFixedOffsetInDays"/> (inclusive).
+        /// </summary>
+        /// <remarks>
+        /// Retained for backward compatibility. New code should use
+        /// <see cref="ParameterDefaults.MinDateShiftOffsetDays"/>.
+        /// </remarks>
+        [Obsolete("Use ParameterDefaults.MinDateShiftOffsetDays")]
+        public const int MinDateShiftOffsetDays = ParameterDefaults.MinDateShiftOffsetDays;
+
+        /// <summary>
+        /// Maximum allowed value for <see cref="DateShiftFixedOffsetInDays"/> (inclusive).
+        /// </summary>
+        /// <remarks>
+        /// Retained for backward compatibility. New code should use
+        /// <see cref="ParameterDefaults.MaxDateShiftOffsetDays"/>.
+        /// </remarks>
+        [Obsolete("Use ParameterDefaults.MaxDateShiftOffsetDays")]
+        public const int MaxDateShiftOffsetDays = ParameterDefaults.MaxDateShiftOffsetDays;
+
+        /// <summary>
+        /// Minimum required length (in characters) for <see cref="CryptoHashKey"/>.
+        /// Keys shorter than this value do not provide adequate entropy for HMAC-SHA256.
+        /// </summary>
+        /// <remarks>
+        /// Retained for backward compatibility. New code should use
+        /// <see cref="ParameterDefaults.MinCryptoHashKeyLength"/>.
+        /// </remarks>
+        [Obsolete("Use ParameterDefaults.MinCryptoHashKeyLength")]
+        public const int MinCryptoHashKeyLength = ParameterDefaults.MinCryptoHashKeyLength;
+
+        /// <summary>
+        /// Valid AES key sizes in bits. Used to validate EncryptKey without allocating an Aes instance.
+        /// AES supports 128-bit (16 bytes), 192-bit (24 bytes), and 256-bit (32 bytes) keys.
+        /// </summary>
+        private static readonly HashSet<int> s_validAesKeySizeBits = new HashSet<int> { 128, 192, 256 };
+
+        /// <summary>
+        /// Secret key used for HMAC-based deterministic date shifting.
+        /// Combined with the resource, file, or folder identifier (according to
+        /// <see cref="DateShiftScope"/>) to produce a consistent, reproducible date offset
+        /// for each unique identifier. Must not be a placeholder or whitespace-only value.
         /// </summary>
         [DataMember(Name = "dateShiftKey")]
         public string DateShiftKey { get; set; }
 
         /// <summary>
-        /// Scope at which the date-shift offset is held constant.
+        /// Granularity scope at which the date-shift offset is held constant.
         /// <list type="bullet">
-        ///   <item><description><see cref="DateShiftScope.Resource"/> — each resource gets an independent shift derived from its ID and key.</description></item>
-        ///   <item><description><see cref="DateShiftScope.File"/> — all resources in the same file share the same shift.</description></item>
-        ///   <item><description><see cref="DateShiftScope.Folder"/> — all resources in the same folder share the same shift.</description></item>
+        ///   <item><description><c>Resource</c> - each resource receives its own deterministic offset derived from its ID and <see cref="DateShiftKey"/>.</description></item>
+        ///   <item><description><c>File</c> - all resources in the same input file share a single offset.</description></item>
+        ///   <item><description><c>Folder</c> - all resources in the same folder share a single offset.</description></item>
         /// </list>
+        /// Narrower scopes (Resource) maximise per-record randomness; wider scopes (Folder)
+        /// preserve temporal relationships across records processed together.
         /// </summary>
         [DataMember(Name = "dateShiftScope")]
         public DateShiftScope DateShiftScope { get; set; }
 
         /// <summary>
-        /// Optional fixed date-shift offset in days, range
-        /// [<see cref="ParameterDefaults.MinDateShiftOffsetDays"/>, <see cref="ParameterDefaults.MaxDateShiftOffsetDays"/>].
-        /// When null, HMAC key-based shift is used per HIPAA Safe Harbor §164.514(b)(2)(i).
+        /// Optional fixed date-shift offset in days. When set, overrides the deterministic
+        /// key-based date shift. Must be in the range
+        /// [<see cref="ParameterDefaults.MinDateShiftOffsetDays"/>,
+        ///  <see cref="ParameterDefaults.MaxDateShiftOffsetDays"/>] (i.e. -365 to +365).
+        /// When null the cryptographic key-based shift is used instead.
         /// </summary>
         [DataMember(Name = "dateShiftFixedOffsetInDays")]
         public int? DateShiftFixedOffsetInDays { get; set; }
 
         /// <summary>
-        /// Key for HMAC-SHA256 cryptographic hashing. Must be at least
-        /// <see cref="ParameterDefaults.MinCryptoHashKeyLength"/> characters.
-        /// Generate with: openssl rand -base64 32
+        /// Key used for HMAC-SHA256 cryptographic hashing of identifiers.
+        /// Must be >= <see cref="ParameterDefaults.MinCryptoHashKeyLength"/> characters
+        /// (non-whitespace) to ensure adequate entropy. Whitespace-only values are rejected.
+        /// Generate a secure key using: openssl rand -base64 32
         /// </summary>
         [DataMember(Name = "cryptoHashKey")]
         public string CryptoHashKey { get; set; }
 
         /// <summary>
-        /// AES encryption key. Must encode to exactly 16, 24, or 32 UTF-8 bytes (AES-128/192/256).
-        /// Generate with: openssl rand -base64 32
+        /// AES symmetric encryption key used by the encrypt anonymization method.
+        /// The key must encode to exactly 16, 24, or 32 UTF-8 bytes, corresponding to
+        /// AES-128, AES-192, and AES-256 respectively. Keys of any other length are
+        /// rejected during <see cref="Validate"/>. Generate a 256-bit key with:
+        ///   openssl rand -base64 32
         /// </summary>
         [DataMember(Name = "encryptKey")]
         public string EncryptKey { get; set; }
 
         /// <summary>
-        /// When true, ages 90+ are fully redacted per HIPAA Safe Harbor §164.514(b)(2)(i);
-        /// ages below 90 are retained.
+        /// When true, ages 90 and above are fully redacted while ages below 90 are retained
+        /// as-is, following the HIPAA Safe Harbor de-identification standard which treats
+        /// ages >= 90 as a direct identifier.
+        /// When false (default), all age values are redacted.
         /// </summary>
         [DataMember(Name = "enablePartialAgesForRedact")]
         public bool EnablePartialAgesForRedact { get; set; }
 
-        /// <summary>When true, only the year component of a date is retained during redaction.</summary>
+        /// <summary>
+        /// When true, only the year component of a date value is retained during redaction;
+        /// month and day are removed. This preserves limited temporal utility while reducing
+        /// re-identification risk.
+        /// When false (default), date values are fully redacted.
+        /// </summary>
         [DataMember(Name = "enablePartialDatesForRedact")]
         public bool EnablePartialDatesForRedact { get; set; }
 
         /// <summary>
-        /// When true, first three digits of ZIP code are retained unless listed in
-        /// <see cref="RestrictedZipCodeTabulationAreas"/>.
-        /// Aligns with HIPAA Safe Harbor §164.514(b)(2)(i).
+        /// When true, the first three digits of a ZIP code are retained during redaction,
+        /// unless the prefix appears in <see cref="RestrictedZipCodeTabulationAreas"/>,
+        /// in which case the entire ZIP code is redacted. This aligns with HIPAA Safe Harbor,
+        /// which permits the 3-digit prefix for geographic areas with a population >= 20,000.
+        /// When false (default), ZIP codes are fully redacted.
         /// </summary>
         [DataMember(Name = "enablePartialZipCodesForRedact")]
         public bool EnablePartialZipCodesForRedact { get; set; }
 
         /// <summary>
-        /// 3-digit ZIP code prefixes with a population under 20,000 (ZIP Code Tabulation Area
-        /// threshold per HIPAA Safe Harbor §164.514(b)(2)(i)) that must be fully redacted.
+        /// List of 3-digit ZIP code prefixes (ZIP Code Tabulation Areas) that must be
+        /// fully redacted because the corresponding geographic area has fewer than 20,000
+        /// people, per HIPAA Safe Harbor section 164.514(b)(2)(i).
+        /// Only evaluated when <see cref="EnablePartialZipCodesForRedact"/> is true.
         /// </summary>
         [DataMember(Name = "restrictedZipCodeTabulationAreas")]
         public List<string> RestrictedZipCodeTabulationAreas { get; set; }
 
         /// <summary>
-        /// Optional k-anonymity post-processing configuration.
-        /// When null (default), k-anonymity is disabled.
+        /// Optional configuration for k-anonymity post-processing.
+        /// When null (default), k-anonymity post-processing is disabled.
         /// </summary>
         [DataMember(Name = "kAnonymitySettings")]
         public KAnonymityParameterConfiguration KAnonymitySettings { get; set; }
 
         /// <summary>
-        /// Optional differential privacy noise injection configuration.
+        /// Optional configuration for differential privacy noise injection.
         /// When null (default), differential privacy is disabled.
         /// </summary>
         [DataMember(Name = "differentialPrivacySettings")]
         public DifferentialPrivacyParameterConfiguration DifferentialPrivacySettings { get; set; }
 
-        /// <summary>Arbitrary JSON extension settings passed through to custom processors.</summary>
+        /// <summary>
+        /// Extension point for tool-specific or experimental settings, stored as an
+        /// arbitrary JSON object. The anonymizer engine does not interpret this field;
+        /// it is passed through as-is to custom processors that may inspect it.
+        /// </summary>
         [DataMember(Name = "customSettings")]
         public JObject CustomSettings { get; set; }
 
-        /// <summary>Optional prefix prepended to resource identifier before HMAC computation.</summary>
+        /// <summary>
+        /// Optional prefix prepended to the resource (or file/folder) identifier before
+        /// HMAC computation during date shifting. Useful for namespace isolation when the
+        /// same <see cref="DateShiftKey"/> is reused across multiple datasets.
+        /// </summary>
         public string DateShiftKeyPrefix { get; set; }
 
         /// <summary>
         /// Validate configuration for security issues and placeholder values.
-        /// Throws <see cref="SecurityException"/> for placeholder keys (fail-secure behavior).
+        ///
+        /// SECURITY: Rejects dangerous placeholder values that should never be used in production.
+        /// This prevents accidental use of example/template configurations with insecure dummy keys.
+        /// Throws SecurityException for placeholder keys to ensure fail-secure behavior.
         /// </summary>
         public void Validate()
         {
@@ -121,12 +190,17 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
             ValidateKeyParameter(DateShiftKey, "dateShiftKey", "date shift");
 
             // SECURITY: Enforce minimum length for CryptoHashKey
-            if (!string.IsNullOrWhiteSpace(CryptoHashKey) && CryptoHashKey.Trim().Length < ParameterDefaults.MinCryptoHashKeyLength)
+            if (!string.IsNullOrWhiteSpace(CryptoHashKey) &&
+                CryptoHashKey.Trim().Length < ParameterDefaults.MinCryptoHashKeyLength)
             {
                 throw new SecurityException(
                     $"SECURITY ERROR: The cryptoHashKey is too short ({CryptoHashKey.Trim().Length} characters). " +
-                    $"A minimum of {ParameterDefaults.MinCryptoHashKeyLength} characters is required for HMAC-SHA256. " +
-                    "Generate a secure key with: openssl rand -base64 32");
+                    $"A minimum of {ParameterDefaults.MinCryptoHashKeyLength} characters is required to ensure " +
+                    "adequate entropy for HMAC-SHA256 operations.\n\n" +
+                    "TO GENERATE A SECURE KEY:\n" +
+                    "  Linux/macOS:   openssl rand -base64 32\n" +
+                    "  Windows:       pwsh -Command \"[Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Minimum 0 -Maximum 256 }))\"\n" +
+                    "  .NET:          var key = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));");
             }
 
             // SECURITY: Validate EncryptKey is a valid AES key size (128/192/256 bits)
@@ -152,8 +226,9 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
         }
 
         /// <summary>
-        /// Validates AES key size using UTF-8 byte count to match actual runtime behavior.
-        /// Valid sizes: 128, 192, or 256 bits (per NIST SP 800-57).
+        /// Validate that the encrypt key size is a valid AES key size (128, 192, or 256 bits).
+        /// Uses a static HashSet of valid sizes to avoid allocating an Aes instance on every call.
+        /// Only validates when encryptKey is non-null and non-empty.
         /// </summary>
         private static void ValidateEncryptKeySize(string encryptKey)
         {
@@ -163,7 +238,7 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
             }
 
             var encryptKeySize = Encoding.UTF8.GetByteCount(encryptKey) * 8;
-            if (!ParameterDefaults.ValidAesKeySizeBits.Contains(encryptKeySize))
+            if (!s_validAesKeySizeBits.Contains(encryptKeySize))
             {
                 throw new AnonymizerConfigurationException(
                     $"Invalid encrypt key size : {encryptKeySize} bits! Please provide key sizes of 128, 192 or 256 bits.");
@@ -171,9 +246,9 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
         }
 
         /// <summary>
-        /// Validates DateShiftFixedOffsetInDays is within
-        /// [<see cref="ParameterDefaults.MinDateShiftOffsetDays"/>, <see cref="ParameterDefaults.MaxDateShiftOffsetDays"/>]
-        /// when provided.
+        /// Validate that DateShiftFixedOffsetInDays, when provided, falls within the allowed
+        /// range [ParameterDefaults.MinDateShiftOffsetDays, ParameterDefaults.MaxDateShiftOffsetDays].
+        /// A null value is always valid - it simply means the key-based shift will be used.
         /// </summary>
         private void ValidateDateShiftFixedOffsetInDays()
         {
@@ -183,86 +258,119 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
             }
 
             int offset = DateShiftFixedOffsetInDays.Value;
-            if (offset < ParameterDefaults.MinDateShiftOffsetDays || offset > ParameterDefaults.MaxDateShiftOffsetDays)
+            if (offset < ParameterDefaults.MinDateShiftOffsetDays ||
+                offset > ParameterDefaults.MaxDateShiftOffsetDays)
             {
                 throw new AnonymizerConfigurationException(
                     $"The dateShiftFixedOffsetInDays value {offset} is out of the allowed range " +
                     $"[{ParameterDefaults.MinDateShiftOffsetDays}, {ParameterDefaults.MaxDateShiftOffsetDays}]. " +
-                    "Provide a value between -365 and 365 days, or omit to use key-based date shift.");
+                    "Provide a value between -365 and 365 days, or omit the setting to use the " +
+                    "deterministic key-based date shift.");
             }
         }
 
         /// <summary>
-        /// Rejects placeholder or whitespace-only key values. SECURITY CRITICAL.
+        /// Validate a key parameter does not contain placeholder values or consist solely of whitespace.
+        /// SECURITY CRITICAL: Prevents use of example/template keys and whitespace-only values in production.
         /// </summary>
         private void ValidateKeyParameter(string keyValue, string parameterName, string keyType)
         {
             if (string.IsNullOrEmpty(keyValue))
             {
-                return;
+                return; // Empty/null keys are allowed if the feature is not used
             }
 
+            // SECURITY: Reject whitespace-only keys - they provide no entropy
             if (string.IsNullOrWhiteSpace(keyValue))
             {
                 throw new SecurityException(
-                    $"SECURITY ERROR: Whitespace-only {keyType} key in '{parameterName}'. " +
-                    "A whitespace-only key provides no entropy. " +
-                    "Generate a secure key with: openssl rand -base64 32");
+                    $"SECURITY ERROR: Whitespace-only {keyType} key detected in '{parameterName}'. " +
+                    "A key consisting entirely of whitespace characters provides no entropy and must not be used. " +
+                    "Generate a cryptographically secure random key using: openssl rand -base64 32");
             }
 
+            // Trim and convert to uppercase for case-insensitive comparison
             var normalizedKey = keyValue.Trim().ToUpperInvariant();
 
+            // Check against all dangerous placeholder patterns
             foreach (var pattern in ParameterDefaults.DangerousPlaceholderPatterns)
             {
                 if (normalizedKey.Contains(pattern))
                 {
                     throw new SecurityException(
-                        $"SECURITY ERROR: Placeholder {keyType} key in '{parameterName}'. " +
-                        $"Replace the placeholder value ('{pattern}') with a cryptographically secure key. " +
-                        "Generate with: openssl rand -base64 32");
+                        $"SECURITY ERROR: Placeholder {keyType} key detected in '{parameterName}'.\n\n" +
+                        $"The configuration contains a placeholder value ('{pattern}') that must be replaced " +
+                        "with a cryptographically secure key before use.\n\n" +
+                        "TO GENERATE A SECURE KEY:\n" +
+                        "  Linux/macOS:   openssl rand -base64 32\n" +
+                        "  Windows:       pwsh -Command \"[Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Minimum 0 -Maximum 256 }))\"\n" +
+                        "  .NET:          var key = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));\n\n" +
+                        "SECURITY WARNING: Using placeholder keys in production:\n" +
+                        "  - Compromises cryptographic operations\n" +
+                        "  - May lead to predictable hash values\n" +
+                        "  - Enables re-identification attacks\n" +
+                        "  - Violates privacy guarantees\n\n" +
+                        "BEST PRACTICES:\n" +
+                        "  - Never commit actual keys to version control\n" +
+                        "  - Use environment variables: Environment.GetEnvironmentVariable(\"CRYPTO_KEY\")\n" +
+                        "  - Use Azure Key Vault, AWS Secrets Manager, or similar for production\n" +
+                        "  - Rotate keys periodically according to your security policy\n" +
+                        "  - Use different keys for different environments (dev/staging/production)\n");
                 }
             }
 
+            // Additional check: warn on very short keys
             if (keyValue.Length < 16)
             {
                 s_logger.LogWarning(
                     $"The {keyType} key in '{parameterName}' is very short ({keyValue.Length} characters). " +
-                    "Recommended minimum is 32 bytes. Short keys may be vulnerable to brute force attacks.");
+                    "Recommended minimum is 32 bytes (44 characters in Base64). " +
+                    "Short keys provide inadequate security and may be vulnerable to brute force attacks.");
             }
 
+            // Check for obviously weak patterns
             if (keyValue.Equals("12345678", StringComparison.Ordinal) ||
                 keyValue.Equals("password", StringComparison.OrdinalIgnoreCase) ||
                 keyValue.Equals("secret", StringComparison.OrdinalIgnoreCase) ||
                 keyValue.Equals("key", StringComparison.OrdinalIgnoreCase) ||
-                keyValue.All(c => c == keyValue[0]))
+                keyValue.All(c => c == keyValue[0])) // All same character
             {
                 throw new SecurityException(
-                    $"SECURITY ERROR: Weak {keyType} key in '{parameterName}'. " +
-                    "The key is a common weak value (e.g., 'password', repeated characters). " +
-                    "Generate a secure key with: openssl rand -base64 32");
+                    $"SECURITY ERROR: Weak {keyType} key detected in '{parameterName}'. " +
+                    "The key appears to be a common weak value (e.g., 'password', '12345678', repeated characters). " +
+                    "Generate a cryptographically secure random key using: openssl rand -base64 32");
             }
         }
 
         /// <summary>
-        /// Validates that DateShiftKey is present when DateShiftFixedOffsetInDays is not set.
-        /// Without a key, the HMAC shift depends only on the predictable resource ID,
-        /// enabling re-identification attacks.
+        /// Validate that a non-empty DateShiftKey is present for ALL DateShiftScope values
+        /// (Resource, File, and Folder) when DateShiftFixedOffsetInDays is not set.
+        ///
+        /// SECURITY: Resource scope also requires a key because the HMAC-based date shift uses
+        /// (resourceId + dateShiftKey) as its input. Without a key, the shift is determined solely
+        /// by the resource ID, which is often predictable or publicly known. An attacker who knows
+        /// the resource ID can recompute the shift and reverse the date offset, enabling
+        /// re-identification. A secret key prevents this.
+        ///
+        /// File and Folder scopes additionally require a key for consistency: all resources
+        /// in the same file or folder must receive the same deterministic shift.
         /// </summary>
         private void ValidateDateShiftKeyForScope()
         {
+            // Use a local variable to avoid ambiguity between the property name and the enum type name.
             var scope = this.DateShiftScope;
 
-            if (string.IsNullOrEmpty(DateShiftKey) && !DateShiftFixedOffsetInDays.HasValue)
+            if (string.IsNullOrEmpty(DateShiftKey) &&
+                !DateShiftFixedOffsetInDays.HasValue)
             {
                 throw new AnonymizerConfigurationException(
                     $"A dateShiftKey is required when dateShiftScope is '{scope}' and dateShiftFixedOffsetInDays is not set. " +
-                    "Provide a non-empty dateShiftKey, or set dateShiftFixedOffsetInDays.");
+                    "Provide a non-empty dateShiftKey, or set dateShiftFixedOffsetInDays to use a fixed date-shift offset instead.");
             }
         }
 
         /// <summary>
-        /// Validates differential privacy parameters per NIST SP 800-188:
-        /// epsilon in (0, 10], delta in [0, 1], sensitivity &gt; 0, maxCumulativeEpsilon &gt; 0.
+        /// Validate differential privacy configuration parameters.
         /// </summary>
         private void ValidateDifferentialPrivacySettings(DifferentialPrivacyParameterConfiguration settings)
         {
@@ -275,16 +383,15 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
             {
                 throw new ArgumentException(
                     $"Differential privacy epsilon value {settings.Epsilon} exceeds maximum of 10.0. " +
-                    "High epsilon values provide minimal privacy protection.");
+                    "High epsilon values provide minimal privacy protection. See configuration comments for guidance.");
             }
 
-            // Warn only when epsilon is strictly above 1.0. The default epsilon IS 1.0, so
-            // the previous condition (>= 1.0) caused spurious LogWarning on every default instance.
             if (settings.Epsilon > 1.0)
             {
                 s_logger.LogWarning(
                     $"Differential privacy epsilon value {settings.Epsilon} is high (>1.0). " +
-                    "Consider epsilon <= 0.1 for strong privacy (NIST SP 800-188 for health data).");
+                    "This provides weaker privacy guarantees. Consider using epsilon <= 1.0 for moderate privacy " +
+                    "or epsilon <= 0.1 for strong privacy (NIST SP 800-188 guidance for health data).");
             }
 
             if (settings.Delta < 0 || settings.Delta > 1)
@@ -304,10 +411,7 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
         }
 
         /// <summary>
-        /// Validates k-anonymity parameters. k must be &gt;= 2 (k=1 provides no protection).
-        /// k=2 is permitted but triggers a warning; HIPAA Safe Harbor recommends k &gt;= 5.
-        /// Privacy composition theorem: combining k-anonymity with l-diversity or t-closeness
-        /// provides stronger privacy guarantees.
+        /// Validate k-anonymity configuration parameters.
         /// </summary>
         private void ValidateKAnonymitySettings(KAnonymityParameterConfiguration settings)
         {
@@ -321,42 +425,50 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
             if (settings.KValue == 2)
             {
                 s_logger.LogWarning(
-                    "K-anonymity k-value is 2 (minimal). Consider k >= 5 (HIPAA Safe Harbor guidance).");
+                    "K-anonymity k-value is 2 (minimal). Consider k >= 5 for better privacy protection " +
+                    "(recommended by HIPAA Safe Harbor guidance).");
             }
 
             if (settings.SuppressionThreshold < 0 || settings.SuppressionThreshold > 1)
             {
                 throw new ArgumentException(
-                    "K-anonymity suppression threshold must be between 0 and 1");
+                    "K-anonymity suppression threshold must be between 0 and 1 (represents percentage)");
             }
         }
     }
 
-    /// <summary>Configuration parameters for k-anonymity processing.</summary>
+    /// <summary>
+    /// Configuration parameters for k-anonymity processing.
+    /// </summary>
     [DataContract]
     public class KAnonymityParameterConfiguration
     {
         /// <summary>
-        /// Minimum group size (default: 5). HIPAA Safe Harbor guidance recommends k &gt;= 5
-        /// to ensure each record is indistinguishable from at least 4 others.
+        /// Minimum group size for k-anonymity (default: 5).
+        /// Each combination of quasi-identifiers must appear in at least k records.
+        /// Higher values provide stronger privacy but may require more aggressive generalization.
         /// </summary>
         [DataMember(Name = "kValue")]
         public int KValue { get; set; } = 5;
 
         /// <summary>
-        /// FHIR paths to quasi-identifiers used in equivalence class partitioning.
+        /// List of FHIR paths to quasi-identifiers.
         /// Example: ["Patient.birthDate", "Patient.address.postalCode", "Patient.gender"]
         /// </summary>
         [DataMember(Name = "quasiIdentifiers")]
         public List<string> QuasiIdentifiers { get; set; }
 
-        /// <summary>Generalization hierarchies: maps FHIR path to generalization strategy.</summary>
+        /// <summary>
+        /// Generalization hierarchies for quasi-identifiers (optional).
+        /// Maps FHIR path to generalization strategy configuration.
+        /// </summary>
         [DataMember(Name = "generalizationHierarchies")]
         public Dictionary<string, object> GeneralizationHierarchies { get; set; }
 
         /// <summary>
-        /// Suppression threshold 0.0–1.0 (default: 0.3). Records that cannot be generalized
-        /// into a k-group and exceed this fraction of the dataset are suppressed.
+        /// Suppression threshold (0.0-1.0). Records that cannot be generalized to meet
+        /// k-anonymity within this fraction of the dataset will be suppressed (removed).
+        /// Default: 0.3 (30%). High suppression rates indicate data utility loss.
         /// </summary>
         [DataMember(Name = "suppressionThreshold")]
         public double SuppressionThreshold { get; set; } = 0.3;
@@ -364,65 +476,69 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
 
     /// <summary>
     /// Configuration parameters for differential privacy processing.
-    /// References: NIST SP 800-188; Dwork and Roth (2014) "Algorithmic Foundations of Differential Privacy".
-    /// The privacy composition theorem applies: sequential composition of k mechanisms each with
-    /// epsilon-DP yields k*epsilon-DP overall.
+    ///
+    /// REFERENCES:
+    /// - NIST Special Publication 800-188: "De-Identifying Government Datasets" (2023 Draft)
+    /// - Dwork, C., and Roth, A. (2014). "The Algorithmic Foundations of Differential Privacy."
     /// </summary>
     [DataContract]
     public class DifferentialPrivacyParameterConfiguration
     {
         /// <summary>
-        /// Privacy budget epsilon (default: 1.0). Lower = stronger privacy.
-        /// Per NIST SP 800-188: epsilon &lt;= 0.1 strong, 0.5–1.0 moderate, 1.0–10.0 weak.
+        /// Privacy budget (epsilon) - lower values provide stronger privacy.
+        /// DEFAULT: 1.0 (reasonable starting point; adjust based on sensitivity analysis)
         /// </summary>
         [DataMember(Name = "epsilon")]
         public double Epsilon { get; set; } = 1.0;
 
         /// <summary>
-        /// Delta for (epsilon,delta)-DP (default: 1e-5). Probability of privacy failure.
-        /// Should be much smaller than 1/n; typical values 1e-5 to 1e-8 for healthcare.
+        /// Delta parameter for (epsilon, delta)-differential privacy.
+        /// Represents the probability of privacy failure. Should be cryptographically small.
+        /// DEFAULT: 1e-5 (appropriate for datasets of up to ~100,000 records)
         /// </summary>
         [DataMember(Name = "delta")]
         public double Delta { get; set; } = 1e-5;
 
         /// <summary>
-        /// Global sensitivity of the query function (default: 1.0).
-        /// Counting queries: 1; sum queries: max value; average: range/n.
+        /// Sensitivity of the query function (global sensitivity).
+        /// DEFAULT: 1.0 (appropriate for counts and bounded numeric fields)
         /// </summary>
         [DataMember(Name = "sensitivity")]
         public double Sensitivity { get; set; } = 1.0;
 
         /// <summary>
-        /// Maximum cumulative epsilon before warning (default: 1.0).
-        /// Used for privacy budget tracking via the composition theorem.
+        /// Maximum cumulative epsilon budget before warning.
+        /// DEFAULT: 1.0 (reasonable for most healthcare research applications per NIST guidance)
         /// </summary>
         [DataMember(Name = "maxCumulativeEpsilon")]
         public double MaxCumulativeEpsilon { get; set; } = 1.0;
 
         /// <summary>
-        /// Use advanced composition for tighter privacy accounting per NIST SP 800-188 §4.3.
-        /// Not yet implemented; falls back to sequential composition. Default: false.
+        /// Whether to use advanced composition for better privacy accounting.
+        /// DEFAULT: false (uses simple sequential composition)
+        /// NOTE: Advanced composition is not yet implemented.
         /// </summary>
         [DataMember(Name = "useAdvancedComposition")]
         public bool UseAdvancedComposition { get; set; } = false;
 
         /// <summary>
-        /// Noise mechanism: "laplace" (epsilon-DP), "gaussian" ((epsilon,delta)-DP), "exponential".
-        /// Default: "laplace".
+        /// Noise mechanism to use: "laplace" (default), "gaussian", or "exponential".
         /// </summary>
         [DataMember(Name = "mechanism")]
         public string Mechanism { get; set; } = "laplace";
 
         /// <summary>
-        /// When true, tracks cumulative epsilon and warns when
-        /// <see cref="MaxCumulativeEpsilon"/> is exceeded. Default: false.
+        /// When true, the engine tracks cumulative epsilon usage and warns when the total
+        /// exceeds <see cref="MaxCumulativeEpsilon"/>.
+        /// When false (default), no budget tracking is performed.
         /// </summary>
         [DataMember(Name = "privacyBudgetTrackingEnabled")]
         public bool PrivacyBudgetTrackingEnabled { get; set; } = false;
 
         /// <summary>
-        /// When true, clips input values before adding noise to bound sensitivity.
-        /// Default: false.
+        /// When true, input values are clipped to a bounded range (derived from
+        /// <see cref="Sensitivity"/>) before noise is added.
+        /// When false (default), values are not clipped prior to noise injection.
         /// </summary>
         [DataMember(Name = "clippingEnabled")]
         public bool ClippingEnabled { get; set; } = false;
