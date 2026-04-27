@@ -14,7 +14,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)AnonymizerConfigurations\AnonymizerConfigurationTests.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)AnonymizerConfigurations\AnonymizerConfigurationValidatorTests.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)AnonymizerConfigurations\ParameterConfigurationTests.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)AnonymizerConfigurations\ParameterDefaultsTests.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)AnonymizerConfigurations\ParameterConfigurationParserTestsBase.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)EmptyElementTest.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)AnonymizerEngineTests.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Extensions\TypedElementNavExtensionsTests.cs" />
