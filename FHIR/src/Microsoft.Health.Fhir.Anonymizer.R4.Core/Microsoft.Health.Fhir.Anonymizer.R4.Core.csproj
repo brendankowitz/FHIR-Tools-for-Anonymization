@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Library</OutputType>
@@ -17,6 +17,10 @@
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Grant test assembly access to internal members (e.g. ParameterDefaults.DangerousPlaceholderPatterns) -->
+    <InternalsVisibleTo Include="Microsoft.Health.Fhir.Anonymizer.R4.Core.UnitTests" />
+  </ItemGroup>
 
   <Import Project="..\Microsoft.Health.Fhir.Anonymizer.Shared.Core\Microsoft.Health.Fhir.Anonymizer.Shared.Core.projitems" Label="Shared" />
 
