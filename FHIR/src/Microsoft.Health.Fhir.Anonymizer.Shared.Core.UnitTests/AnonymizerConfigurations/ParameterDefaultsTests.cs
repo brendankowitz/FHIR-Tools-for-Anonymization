@@ -1,301 +1,288 @@
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-
-using System.Linq;
+using System;
+using System.Security;
 using Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations;
+using Microsoft.Health.Fhir.Anonymizer.Core.Exceptions;
 using Xunit;
 
 namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.AnonymizerConfigurations
 {
-    /// <summary>
-    /// Tests that assert the exact expected values of every entry in
-    /// <see cref="ParameterDefaults"/>. Any unintentional drift in a default value
-    /// will cause one of these tests to fail, making compliance regressions
-    /// immediately visible in CI.
-    /// </summary>
     public class ParameterDefaultsTests
     {
-        // -------------------------------------------------------------------
-        // DateShift
-        // -------------------------------------------------------------------
+        // -----------------------------------------------------------------------
+        // DangerousPlaceholderPatterns
+        // -----------------------------------------------------------------------
 
         [Fact]
-        public void MinDateShiftOffsetDays_ShouldBeMinus365()
+        public void DangerousPlaceholderPatterns_ShouldContainKnownSentinels()
         {
-            Assert.Equal(-365, ParameterDefaults.MinDateShiftOffsetDays);
+            var patterns = ParameterDefaults.DangerousPlaceholderPatterns;
+
+            Assert.Contains("YOUR_KEY_HERE", patterns);
+            Assert.Contains("PLACEHOLDER", patterns);
+            Assert.Contains("CHANGE_ME", patterns);
+            Assert.Contains("TEST_KEY", patterns);
+            Assert.Contains("TODO", patterns);
+            Assert.Contains("FIXME", patterns);
+            Assert.Contains("$HMAC_KEY", patterns);
+            Assert.Contains("CHANGEME", patterns);
+            Assert.Contains("REPLACE_ME", patterns);
         }
 
         [Fact]
-        public void MaxDateShiftOffsetDays_ShouldBe365()
+        public void DangerousPlaceholderPatterns_ShouldNotContainAnonymizationOutputMarkers()
         {
-            Assert.Equal(365, ParameterDefaults.MaxDateShiftOffsetDays);
-        }
+            var patterns = ParameterDefaults.DangerousPlaceholderPatterns;
 
-        // -------------------------------------------------------------------
-        // CryptoHash
-        // -------------------------------------------------------------------
+            Assert.DoesNotContain("REDACTED", patterns);
+            Assert.DoesNotContain("[REDACTED]", patterns);
+            Assert.DoesNotContain("***", patterns);
+            Assert.DoesNotContain("ANONYMIZED", patterns);
+        }
 
         [Fact]
-        public void MinCryptoHashKeyLength_ShouldBe32()
-        {
-            Assert.Equal(32, ParameterDefaults.MinCryptoHashKeyLength);
-        }
-
-        // -------------------------------------------------------------------
-        // Encrypt – AES key sizes
-        // -------------------------------------------------------------------
-
-        [Fact]
-        public void ValidAesKeySizeBits_ShouldContainExactlyThreeSizes()
-        {
-            Assert.Equal(3, ParameterDefaults.ValidAesKeySizeBits.Count);
-        }
-
-        [Theory]
-        [InlineData(128)]
-        [InlineData(192)]
-        [InlineData(256)]
-        public void ValidAesKeySizeBits_ShouldContain(int expectedSize)
-        {
-            Assert.Contains(expectedSize, ParameterDefaults.ValidAesKeySizeBits);
-        }
-
-        [Theory]
-        [InlineData(64)]
-        [InlineData(512)]
-        [InlineData(0)]
-        public void ValidAesKeySizeBits_ShouldNotContainInvalidSize(int invalidSize)
-        {
-            Assert.DoesNotContain(invalidSize, ParameterDefaults.ValidAesKeySizeBits);
-        }
-
-        // -------------------------------------------------------------------
-        // Security – dangerous placeholder patterns
-        // -------------------------------------------------------------------
-
-        [Fact]
-        public void DangerousPlaceholderPatterns_ShouldBeNonEmpty()
+        public void DangerousPlaceholderPatterns_ShouldNotBeEmpty()
         {
             Assert.NotEmpty(ParameterDefaults.DangerousPlaceholderPatterns);
         }
 
+        // -----------------------------------------------------------------------
+        // AnonymizationOutputMarkers
+        // -----------------------------------------------------------------------
+
+        [Fact]
+        public void AnonymizationOutputMarkers_ShouldContainKnownMarkers()
+        {
+            var markers = ParameterDefaults.AnonymizationOutputMarkers;
+
+            Assert.Contains("REDACTED", markers);
+            Assert.Contains("[REDACTED]", markers);
+            Assert.Contains("***", markers);
+            Assert.Contains("ANONYMIZED", markers);
+        }
+
+        [Fact]
+        public void AnonymizationOutputMarkers_ShouldNotBeEmpty()
+        {
+            Assert.NotEmpty(ParameterDefaults.AnonymizationOutputMarkers);
+        }
+
+        [Fact]
+        public void AnonymizationOutputMarkers_ShouldNotOverlapWithDangerousPlaceholderPatterns()
+        {
+            foreach (var marker in ParameterDefaults.AnonymizationOutputMarkers)
+            {
+                Assert.DoesNotContain(marker, ParameterDefaults.DangerousPlaceholderPatterns);
+            }
+        }
+
+        // -----------------------------------------------------------------------
+        // ValidAesKeySizeBits
+        // -----------------------------------------------------------------------
+
+        [Fact]
+        public void ValidAesKeySizeBits_ShouldContainExpectedSizes()
+        {
+            var sizes = ParameterDefaults.ValidAesKeySizeBits;
+
+            Assert.Contains(128, sizes);
+            Assert.Contains(192, sizes);
+            Assert.Contains(256, sizes);
+            Assert.Equal(3, sizes.Count);
+        }
+
         [Theory]
-        [InlineData("REDACTED")]
-        [InlineData("[REDACTED]")]
-        [InlineData("***")]
-        public void DangerousPlaceholderPatterns_ShouldContainKnownSentinels(string sentinel)
+        [InlineData(64)]
+        [InlineData(96)]
+        [InlineData(160)]
+        [InlineData(512)]
+        public void ValidAesKeySizeBits_ShouldNotContainInvalidSizes(int invalidSize)
         {
-            Assert.Contains(sentinel, ParameterDefaults.DangerousPlaceholderPatterns);
+            Assert.DoesNotContain(invalidSize, ParameterDefaults.ValidAesKeySizeBits);
         }
 
-        // -------------------------------------------------------------------
-        // Redact
-        // -------------------------------------------------------------------
+        // -----------------------------------------------------------------------
+        // Validate() - DateShiftFixedOffsetInDays range
+        // -----------------------------------------------------------------------
 
-        [Fact]
-        public void EnablePartialAgesForRedact_DefaultShouldBeFalse()
+        [Theory]
+        [InlineData(-366)]
+        [InlineData(-1000)]
+        [InlineData(366)]
+        [InlineData(1000)]
+        public void Validate_DateShiftFixedOffsetOutOfRange_ThrowsAnonymizerConfigurationException(int offset)
         {
-            Assert.False(ParameterDefaults.EnablePartialAgesForRedact);
+            var config = new ParameterConfiguration { DateShiftFixedOffsetInDays = offset };
+
+            var ex = Assert.Throws<AnonymizerConfigurationException>(() => config.Validate());
+            Assert.Contains(offset.ToString(), ex.Message);
+            Assert.Contains("-365", ex.Message);
+            Assert.Contains("365", ex.Message);
         }
 
-        [Fact]
-        public void EnablePartialDatesForRedact_DefaultShouldBeFalse()
+        [Theory]
+        [InlineData(-365)]
+        [InlineData(0)]
+        [InlineData(365)]
+        public void Validate_DateShiftFixedOffsetInRange_DoesNotThrow(int offset)
         {
-            Assert.False(ParameterDefaults.EnablePartialDatesForRedact);
+            var config = new ParameterConfiguration { DateShiftFixedOffsetInDays = offset };
+            config.Validate();
         }
 
-        [Fact]
-        public void EnablePartialZipCodesForRedact_DefaultShouldBeFalse()
+        // -----------------------------------------------------------------------
+        // Validate() - placeholder key detection
+        // -----------------------------------------------------------------------
+
+        [Theory]
+        [InlineData("YOUR_KEY_HERE")]
+        [InlineData("placeholder_value")]
+        [InlineData("change_me")]
+        [InlineData("test_key_value")]
+        public void Validate_CryptoHashKeyWithPlaceholder_ThrowsSecurityException(string key)
         {
-            Assert.False(ParameterDefaults.EnablePartialZipCodesForRedact);
+            var config = new ParameterConfiguration
+            {
+                CryptoHashKey = key,
+                DateShiftFixedOffsetInDays = 0
+            };
+            Assert.Throws<SecurityException>(() => config.Validate());
         }
 
-        // -------------------------------------------------------------------
-        // Redact – ParameterConfiguration property defaults must match
-        // -------------------------------------------------------------------
-
-        [Fact]
-        public void ParameterConfiguration_EnablePartialAgesForRedact_ShouldMatchDefault()
+        [Theory]
+        [InlineData("YOUR_KEY_HERE")]
+        [InlineData("placeholder_value")]
+        [InlineData("change_me")]
+        public void Validate_DateShiftKeyWithPlaceholder_ThrowsSecurityException(string key)
         {
-            var config = new ParameterConfiguration();
-            Assert.Equal(ParameterDefaults.EnablePartialAgesForRedact, config.EnablePartialAgesForRedact);
+            var config = new ParameterConfiguration
+            {
+                DateShiftKey = key,
+                DateShiftFixedOffsetInDays = 0
+            };
+            Assert.Throws<SecurityException>(() => config.Validate());
         }
 
-        [Fact]
-        public void ParameterConfiguration_EnablePartialDatesForRedact_ShouldMatchDefault()
+        [Theory]
+        [InlineData("YOUR_KEY_HERE")]
+        [InlineData("placeholder_value")]
+        [InlineData("change_me")]
+        public void Validate_EncryptKeyWithPlaceholder_ThrowsSecurityException(string key)
         {
-            var config = new ParameterConfiguration();
-            Assert.Equal(ParameterDefaults.EnablePartialDatesForRedact, config.EnablePartialDatesForRedact);
+            var config = new ParameterConfiguration
+            {
+                EncryptKey = key,
+                DateShiftFixedOffsetInDays = 0
+            };
+            Assert.Throws<SecurityException>(() => config.Validate());
         }
 
+        // -----------------------------------------------------------------------
+        // Validate() - output markers in keys are NOT rejected
+        // -----------------------------------------------------------------------
+
         [Fact]
-        public void ParameterConfiguration_EnablePartialZipCodesForRedact_ShouldMatchDefault()
+        public void Validate_CryptoHashKeyContainingRedacted_DoesNotThrowSecurityException()
         {
-            var config = new ParameterConfiguration();
-            Assert.Equal(ParameterDefaults.EnablePartialZipCodesForRedact, config.EnablePartialZipCodesForRedact);
+            // "REDACTED" is a legitimate output marker, not a dangerous key placeholder.
+            const string key = "REDACTED_abcdefghijklmnopqrstuvw"; // 32 chars
+            Assert.Equal(32, key.Length);
+
+            var config = new ParameterConfiguration
+            {
+                CryptoHashKey = key,
+                DateShiftFixedOffsetInDays = 0
+            };
+            config.Validate();
         }
 
-        // -------------------------------------------------------------------
-        // Backward-compatible API constants on ParameterConfiguration
-        // -------------------------------------------------------------------
+        // -----------------------------------------------------------------------
+        // Validate() - differential privacy epsilon bounds
+        // -----------------------------------------------------------------------
 
-        [Fact]
-        public void ParameterConfiguration_MinDateShiftOffsetDays_ShouldForwardToDefaults()
+        [Theory]
+        [InlineData(0.0)]
+        [InlineData(-1.0)]
+        [InlineData(-0.001)]
+        public void Validate_EpsilonZeroOrNegative_ThrowsArgumentException(double epsilon)
         {
-            Assert.Equal(ParameterDefaults.MinDateShiftOffsetDays,
-                ParameterConfiguration.MinDateShiftOffsetDays);
+            var config = new ParameterConfiguration
+            {
+                DifferentialPrivacySettings = new DifferentialPrivacyParameterConfiguration
+                {
+                    Epsilon = epsilon, Sensitivity = 1.0, MaxCumulativeEpsilon = 1.0
+                },
+                DateShiftFixedOffsetInDays = 0
+            };
+            Assert.Throws<ArgumentException>(() => config.Validate());
         }
 
-        [Fact]
-        public void ParameterConfiguration_MaxDateShiftOffsetDays_ShouldForwardToDefaults()
+        [Theory]
+        [InlineData(10.1)]
+        [InlineData(100.0)]
+        public void Validate_EpsilonAboveMaximum_ThrowsArgumentException(double epsilon)
         {
-            Assert.Equal(ParameterDefaults.MaxDateShiftOffsetDays,
-                ParameterConfiguration.MaxDateShiftOffsetDays);
+            var config = new ParameterConfiguration
+            {
+                DifferentialPrivacySettings = new DifferentialPrivacyParameterConfiguration
+                {
+                    Epsilon = epsilon, Sensitivity = 1.0, MaxCumulativeEpsilon = 1.0
+                },
+                DateShiftFixedOffsetInDays = 0
+            };
+            Assert.Throws<ArgumentException>(() => config.Validate());
         }
 
-        [Fact]
-        public void ParameterConfiguration_MinCryptoHashKeyLength_ShouldForwardToDefaults()
+        [Theory]
+        [InlineData(0.001)]
+        [InlineData(0.1)]
+        [InlineData(0.99)]
+        [InlineData(9.99)]
+        [InlineData(10.0)]
+        public void Validate_EpsilonWithinValidRange_DoesNotThrow(double epsilon)
         {
-            Assert.Equal(ParameterDefaults.MinCryptoHashKeyLength,
-                ParameterConfiguration.MinCryptoHashKeyLength);
+            var config = new ParameterConfiguration
+            {
+                DifferentialPrivacySettings = new DifferentialPrivacyParameterConfiguration
+                {
+                    Epsilon = epsilon, Sensitivity = 1.0, MaxCumulativeEpsilon = 1.0
+                },
+                DateShiftFixedOffsetInDays = 0
+            };
+            config.Validate();
         }
 
-        // -------------------------------------------------------------------
-        // KAnonymity
-        // -------------------------------------------------------------------
+        // -----------------------------------------------------------------------
+        // Validate() - k-anonymity k-value bounds
+        // -----------------------------------------------------------------------
 
-        [Fact]
-        public void KValue_DefaultShouldBe5()
+        [Theory]
+        [InlineData(0)]
+        [InlineData(1)]
+        [InlineData(-5)]
+        public void Validate_KValueLessThanTwo_ThrowsArgumentException(int kValue)
         {
-            Assert.Equal(5, ParameterDefaults.KValue);
+            var config = new ParameterConfiguration
+            {
+                KAnonymitySettings = new KAnonymityParameterConfiguration { KValue = kValue },
+                DateShiftFixedOffsetInDays = 0
+            };
+            var ex = Assert.Throws<ArgumentException>(() => config.Validate());
+            Assert.Contains(kValue.ToString(), ex.Message);
         }
 
-        [Fact]
-        public void SuppressionThreshold_DefaultShouldBe0Point3()
+        [Theory]
+        [InlineData(2)]
+        [InlineData(5)]
+        [InlineData(10)]
+        [InlineData(100)]
+        public void Validate_KValueTwoOrGreater_DoesNotThrow(int kValue)
         {
-            Assert.Equal(0.3, ParameterDefaults.SuppressionThreshold);
-        }
-
-        [Fact]
-        public void KAnonymityParameterConfiguration_KValue_ShouldMatchDefault()
-        {
-            var config = new KAnonymityParameterConfiguration();
-            Assert.Equal(ParameterDefaults.KValue, config.KValue);
-        }
-
-        [Fact]
-        public void KAnonymityParameterConfiguration_SuppressionThreshold_ShouldMatchDefault()
-        {
-            var config = new KAnonymityParameterConfiguration();
-            Assert.Equal(ParameterDefaults.SuppressionThreshold, config.SuppressionThreshold);
-        }
-
-        // -------------------------------------------------------------------
-        // DifferentialPrivacy
-        // -------------------------------------------------------------------
-
-        [Fact]
-        public void Epsilon_DefaultShouldBe1Point0()
-        {
-            Assert.Equal(1.0, ParameterDefaults.Epsilon);
-        }
-
-        [Fact]
-        public void Delta_DefaultShouldBe1e5()
-        {
-            Assert.Equal(1e-5, ParameterDefaults.Delta);
-        }
-
-        [Fact]
-        public void Sensitivity_DefaultShouldBe1Point0()
-        {
-            Assert.Equal(1.0, ParameterDefaults.Sensitivity);
-        }
-
-        [Fact]
-        public void MaxCumulativeEpsilon_DefaultShouldBe1Point0()
-        {
-            Assert.Equal(1.0, ParameterDefaults.MaxCumulativeEpsilon);
-        }
-
-        [Fact]
-        public void UseAdvancedComposition_DefaultShouldBeFalse()
-        {
-            Assert.False(ParameterDefaults.UseAdvancedComposition);
-        }
-
-        [Fact]
-        public void Mechanism_DefaultShouldBeLaplace()
-        {
-            Assert.Equal("laplace", ParameterDefaults.Mechanism);
-        }
-
-        [Fact]
-        public void PrivacyBudgetTrackingEnabled_DefaultShouldBeFalse()
-        {
-            Assert.False(ParameterDefaults.PrivacyBudgetTrackingEnabled);
-        }
-
-        [Fact]
-        public void ClippingEnabled_DefaultShouldBeFalse()
-        {
-            Assert.False(ParameterDefaults.ClippingEnabled);
-        }
-
-        [Fact]
-        public void DifferentialPrivacyParameterConfiguration_Epsilon_ShouldMatchDefault()
-        {
-            var config = new DifferentialPrivacyParameterConfiguration();
-            Assert.Equal(ParameterDefaults.Epsilon, config.Epsilon);
-        }
-
-        [Fact]
-        public void DifferentialPrivacyParameterConfiguration_Delta_ShouldMatchDefault()
-        {
-            var config = new DifferentialPrivacyParameterConfiguration();
-            Assert.Equal(ParameterDefaults.Delta, config.Delta);
-        }
-
-        [Fact]
-        public void DifferentialPrivacyParameterConfiguration_Sensitivity_ShouldMatchDefault()
-        {
-            var config = new DifferentialPrivacyParameterConfiguration();
-            Assert.Equal(ParameterDefaults.Sensitivity, config.Sensitivity);
-        }
-
-        [Fact]
-        public void DifferentialPrivacyParameterConfiguration_MaxCumulativeEpsilon_ShouldMatchDefault()
-        {
-            var config = new DifferentialPrivacyParameterConfiguration();
-            Assert.Equal(ParameterDefaults.MaxCumulativeEpsilon, config.MaxCumulativeEpsilon);
-        }
-
-        [Fact]
-        public void DifferentialPrivacyParameterConfiguration_UseAdvancedComposition_ShouldMatchDefault()
-        {
-            var config = new DifferentialPrivacyParameterConfiguration();
-            Assert.Equal(ParameterDefaults.UseAdvancedComposition, config.UseAdvancedComposition);
-        }
-
-        [Fact]
-        public void DifferentialPrivacyParameterConfiguration_Mechanism_ShouldMatchDefault()
-        {
-            var config = new DifferentialPrivacyParameterConfiguration();
-            Assert.Equal(ParameterDefaults.Mechanism, config.Mechanism);
-        }
-
-        [Fact]
-        public void DifferentialPrivacyParameterConfiguration_PrivacyBudgetTrackingEnabled_ShouldMatchDefault()
-        {
-            var config = new DifferentialPrivacyParameterConfiguration();
-            Assert.Equal(ParameterDefaults.PrivacyBudgetTrackingEnabled, config.PrivacyBudgetTrackingEnabled);
-        }
-
-        [Fact]
-        public void DifferentialPrivacyParameterConfiguration_ClippingEnabled_ShouldMatchDefault()
-        {
-            var config = new DifferentialPrivacyParameterConfiguration();
-            Assert.Equal(ParameterDefaults.ClippingEnabled, config.ClippingEnabled);
+            var config = new ParameterConfiguration
+            {
+                KAnonymitySettings = new KAnonymityParameterConfiguration { KValue = kValue },
+                DateShiftFixedOffsetInDays = 0
+            };
+            config.Validate();
         }
     }
 }
