@@ -292,10 +292,11 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
             // Trim and convert to uppercase for case-insensitive comparison
             var normalizedKey = keyValue.Trim().ToUpperInvariant();
 
-            // Check against all dangerous placeholder patterns
+            // Check against all dangerous placeholder patterns.
+            // Normalize both sides to upper-case for case-insensitive comparison.
             foreach (var pattern in ParameterDefaults.DangerousPlaceholderPatterns)
             {
-                if (normalizedKey.Contains(pattern))
+                if (normalizedKey.Contains(pattern.ToUpperInvariant(), StringComparison.Ordinal))
                 {
                     throw new SecurityException(
                         $"SECURITY ERROR: Placeholder {keyType} key detected in '{parameterName}'.\n\n" +
@@ -494,51 +495,60 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
         /// <summary>
         /// Delta parameter for (epsilon, delta)-differential privacy.
         /// Represents the probability of privacy failure. Should be cryptographically small.
-        /// DEFAULT: 1e-5 (appropriate for datasets of up to ~100,000 records)
+        /// DEFAULT: 1e-5 (appropriate for datasets of up to ~100,000 records; scale down
+        /// e.g. 1e-6 for larger datasets per NIST SP 800-226 guidance)
         /// </summary>
         [DataMember(Name = "delta")]
         public double Delta { get; set; } = 1e-5;
 
         /// <summary>
-        /// Sensitivity of the query function (global sensitivity).
-        /// DEFAULT: 1.0 (appropriate for counts and bounded numeric fields)
+        /// Sensitivity of the query - maximum change in output for one record's addition/removal.
+        /// Must be set based on the specific query being protected.
+        /// DEFAULT: 1.0 (appropriate for counting queries)
         /// </summary>
         [DataMember(Name = "sensitivity")]
         public double Sensitivity { get; set; } = 1.0;
 
         /// <summary>
-        /// Maximum cumulative epsilon budget before warning.
-        /// DEFAULT: 1.0 (reasonable for most healthcare research applications per NIST guidance)
+        /// Maximum cumulative privacy budget across all queries.
+        /// Prevents epsilon budget exhaustion through repeated queries.
+        /// DEFAULT: 1.0
         /// </summary>
         [DataMember(Name = "maxCumulativeEpsilon")]
         public double MaxCumulativeEpsilon { get; set; } = 1.0;
 
         /// <summary>
-        /// Whether to use advanced composition for better privacy accounting.
-        /// DEFAULT: false (uses simple sequential composition)
-        /// NOTE: Advanced composition is not yet implemented.
+        /// When true, uses advanced composition theorems (e.g., the moments accountant)
+        /// to allow tighter privacy budget accounting across multiple queries, yielding
+        /// a lower effective epsilon for the same number of queries than basic composition.
+        /// DEFAULT: false (basic composition provides conservative, simpler guarantees)
         /// </summary>
         [DataMember(Name = "useAdvancedComposition")]
         public bool UseAdvancedComposition { get; set; } = false;
 
         /// <summary>
-        /// Noise mechanism to use: "laplace" (default), "gaussian", or "exponential".
+        /// The differential privacy noise mechanism to use.
+        /// Supported values: "Laplace" (default, for epsilon-DP), "Gaussian" (for (epsilon,delta)-DP).
+        /// The Laplace mechanism adds noise proportional to sensitivity/epsilon.
+        /// The Gaussian mechanism adds Gaussian noise calibrated to (epsilon, delta)-DP.
         /// </summary>
         [DataMember(Name = "mechanism")]
-        public string Mechanism { get; set; } = "laplace";
+        public string Mechanism { get; set; } = "Laplace";
 
         /// <summary>
-        /// When true, the engine tracks cumulative epsilon usage and warns when the total
-        /// exceeds <see cref="MaxCumulativeEpsilon"/>.
-        /// When false (default), no budget tracking is performed.
+        /// When true, tracks cumulative epsilon budget consumption across all queries in a session.
+        /// Once the cumulative budget exceeds <see cref="MaxCumulativeEpsilon"/>, further queries
+        /// are rejected to prevent budget exhaustion attacks.
+        /// DEFAULT: false
         /// </summary>
         [DataMember(Name = "privacyBudgetTrackingEnabled")]
         public bool PrivacyBudgetTrackingEnabled { get; set; } = false;
 
         /// <summary>
-        /// When true, input values are clipped to a bounded range (derived from
-        /// <see cref="Sensitivity"/>) before noise is added.
-        /// When false (default), values are not clipped prior to noise injection.
+        /// When true, enables sensitivity clipping to bound each individual record's contribution
+        /// to the query result before noise is added. Clipping ensures no single record can
+        /// inflate the sensitivity beyond the configured value, strengthening privacy guarantees.
+        /// DEFAULT: false
         /// </summary>
         [DataMember(Name = "clippingEnabled")]
         public bool ClippingEnabled { get; set; } = false;

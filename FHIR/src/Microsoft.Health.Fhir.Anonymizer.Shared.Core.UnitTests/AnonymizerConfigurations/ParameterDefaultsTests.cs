@@ -92,6 +92,35 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.AnonymizerConfiguratio
             Assert.Contains("CHANGE_ME", ParameterDefaults.DangerousPlaceholderPatterns);
         }
 
+        [Fact]
+        public void DangerousPlaceholderPatterns_ContainsTodoAndFixme()
+        {
+            // These entries are deliberate: 'TODO' and 'FIXME' are commonly left in
+            // template configuration files as placeholder values and must be rejected
+            // as cryptographic keys.
+            Assert.Contains("TODO", ParameterDefaults.DangerousPlaceholderPatterns);
+            Assert.Contains("FIXME", ParameterDefaults.DangerousPlaceholderPatterns);
+        }
+
+        /// <summary>
+        /// Asserts that every entry in DangerousPlaceholderPatterns is already uppercase.
+        /// This self-enforcing invariant makes it safe to call ToUpperInvariant() on each
+        /// pattern in ValidateKeyParameter without risk of unintended behavior from
+        /// mixed-case entries introduced in the future.
+        /// </summary>
+        [Fact]
+        public void DangerousPlaceholderPatterns_AllEntriesAreUpperInvariant()
+        {
+            foreach (var pattern in ParameterDefaults.DangerousPlaceholderPatterns)
+            {
+                Assert.Equal(
+                    pattern.ToUpperInvariant(),
+                    pattern,
+                    $"DangerousPlaceholderPatterns entry '{pattern}' is not all-uppercase. " +
+                    "All entries must be uppercase to ensure consistent case-insensitive comparison.");
+            }
+        }
+
         // -----------------------------------------------------------------------
         // AnonymizationOutputMarkers
         // -----------------------------------------------------------------------

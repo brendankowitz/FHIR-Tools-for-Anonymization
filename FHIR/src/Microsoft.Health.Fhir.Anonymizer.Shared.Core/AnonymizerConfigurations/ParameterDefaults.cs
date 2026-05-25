@@ -33,6 +33,7 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
         /// Made public so external code can surface the same rejection logic without
         /// duplicating the pattern list.
         /// Using ImmutableArray prevents runtime mutation via casting to a mutable interface.
+        /// Validated case-insensitively by ValidateKeyParameter via ToUpperInvariant().
         /// </summary>
         public static readonly ImmutableArray<string> DangerousPlaceholderPatterns = ImmutableArray.Create(
             "$HMAC_KEY",
@@ -50,6 +51,9 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
             "<YOUR_KEY>",
             "[YOUR_KEY]",
             "{{YOUR_KEY}}",
+            // The following two entries are deliberate: reject any key whose value is literally
+            // the word "TODO" or "FIXME", since template authors often leave such placeholder
+            // strings in configuration files rather than replacing them with real keys.
             "TODO",
             "FIXME"
         );
