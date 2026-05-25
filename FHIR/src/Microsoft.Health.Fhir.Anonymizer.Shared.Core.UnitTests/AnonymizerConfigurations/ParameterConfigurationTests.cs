@@ -395,6 +395,8 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.AnonymizerConfiguratio
         [InlineData("FIXME")]
         [InlineData("fixme")]
         [InlineData("Fixme")]
+        [InlineData("todolist_key_that_is_long_enough_for_length_check")]
+        [InlineData("fixme_embedded_key_that_is_long_enough_for_check")]
         public void Validate_WhenEncryptKeyContainsTodoOrFixme_ThrowsSecurityException(string key)
         {
             var config = new ParameterConfiguration { EncryptKey = key };
@@ -408,14 +410,77 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.AnonymizerConfiguratio
         [InlineData("FIXME")]
         [InlineData("fixme")]
         [InlineData("Fixme")]
+        [InlineData("todolist_key_that_is_long_enough_for_length_check")]
+        [InlineData("fixme_embedded_key_that_is_long_enough_for_check")]
         public void Validate_WhenDateShiftKeyContainsTodoOrFixme_ThrowsSecurityException(string key)
         {
             var config = new ParameterConfiguration
             {
                 DateShiftKey = key,
-                DateShiftFixedOffsetInDays = 0  // avoid requiring DateShiftKey for scope validation
+                // Test-only: set a non-null fixed offset solely to satisfy scope validation; 0 is not a valid production offset.
+                DateShiftFixedOffsetInDays = 0
             };
             Assert.Throws<SecurityException>(() => config.Validate());
+        }
+
+        // -----------------------------------------------------------------------
+        // Valid key positive tests (guard against over-eager pattern matching)
+        // -----------------------------------------------------------------------
+
+        /// <summary>
+        /// A known-valid 32-character random hex key must not be rejected by CryptoHashKey validation.
+        /// Guards against future regressions where valid keys might accidentally match a placeholder pattern.
+        /// </summary>
+        [Theory]
+        [InlineData("a3f8b2e1d4c7f9a0b3e2d5c8f1a4b7e0")] // 32 hex chars, no dangerous patterns
+        public void Validate_ValidCryptoHashKey_DoesNotThrow(string key)
+        {
+            var config = new ParameterConfiguration
+            {
+                CryptoHashKey = key,
+                // Test-only: set a non-null fixed offset solely to satisfy scope validation; 0 is not a valid production offset.
+                DateShiftFixedOffsetInDays = 0
+            };
+            // Guard against over-eager pattern matching: a valid random hex key must not be rejected.
+            config.Validate();
+        }
+
+        /// <summary>
+        /// Known-valid AES keys (16, 24, 32 bytes) must not be rejected by EncryptKey validation.
+        /// Guards against future regressions where valid AES keys might accidentally match a placeholder pattern.
+        /// </summary>
+        [Theory]
+        [InlineData("a3f8b2e1d4c7f9a0")]                 // 16 bytes => AES-128
+        [InlineData("a3f8b2e1d4c7f9a0b3e2d5c8")]         // 24 bytes => AES-192
+        [InlineData("a3f8b2e1d4c7f9a0b3e2d5c8f1a4b7e0")] // 32 bytes => AES-256
+        public void Validate_ValidEncryptKey_DoesNotThrow(string key)
+        {
+            var config = new ParameterConfiguration
+            {
+                EncryptKey = key,
+                // Test-only: set a non-null fixed offset solely to satisfy scope validation; 0 is not a valid production offset.
+                DateShiftFixedOffsetInDays = 0
+            };
+            // Guard against over-eager pattern matching: a valid AES key must not be rejected.
+            config.Validate();
+        }
+
+        /// <summary>
+        /// A known-valid 32-character random hex key must not be rejected by DateShiftKey validation.
+        /// Guards against future regressions where valid keys might accidentally match a placeholder pattern.
+        /// </summary>
+        [Theory]
+        [InlineData("a3f8b2e1d4c7f9a0b3e2d5c8f1a4b7e0")] // 32 hex chars, no dangerous patterns
+        public void Validate_ValidDateShiftKey_DoesNotThrow(string key)
+        {
+            var config = new ParameterConfiguration
+            {
+                DateShiftKey = key,
+                // Test-only: set a non-null fixed offset solely to satisfy scope validation; 0 is not a valid production offset.
+                DateShiftFixedOffsetInDays = 0
+            };
+            // Guard against over-eager pattern matching: a valid random hex key must not be rejected.
+            config.Validate();
         }
     }
 }

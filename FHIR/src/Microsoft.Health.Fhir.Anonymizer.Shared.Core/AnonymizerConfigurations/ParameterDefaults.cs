@@ -33,6 +33,7 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
         /// Made public so external code can surface the same rejection logic without
         /// duplicating the pattern list.
         /// Using ImmutableArray prevents runtime mutation via casting to a mutable interface.
+        /// Validated case-insensitively by ValidateKeyParameter via ToUpperInvariant().
         /// </summary>
         public static readonly ImmutableArray<string> DangerousPlaceholderPatterns = ImmutableArray.Create(
             "$HMAC_KEY",
