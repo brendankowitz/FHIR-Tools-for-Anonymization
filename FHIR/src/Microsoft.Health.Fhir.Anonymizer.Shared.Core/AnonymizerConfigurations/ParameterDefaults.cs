@@ -50,6 +50,9 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
             "<YOUR_KEY>",
             "[YOUR_KEY]",
             "{{YOUR_KEY}}",
+            // The following two entries are deliberate: reject any key whose value is literally
+            // the word "TODO" or "FIXME", since template authors often leave such placeholder
+            // strings in configuration files rather than replacing them with real keys.
             "TODO",
             "FIXME"
         );

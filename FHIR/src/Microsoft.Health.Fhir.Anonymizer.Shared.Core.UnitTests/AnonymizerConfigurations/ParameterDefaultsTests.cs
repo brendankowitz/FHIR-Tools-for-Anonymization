@@ -92,6 +92,16 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.AnonymizerConfiguratio
             Assert.Contains("CHANGE_ME", ParameterDefaults.DangerousPlaceholderPatterns);
         }
 
+        [Fact]
+        public void DangerousPlaceholderPatterns_ContainsTodoAndFixme()
+        {
+            // These entries are deliberate: 'TODO' and 'FIXME' are commonly left in
+            // template configuration files as placeholder values and must be rejected
+            // as cryptographic keys.
+            Assert.Contains("TODO", ParameterDefaults.DangerousPlaceholderPatterns);
+            Assert.Contains("FIXME", ParameterDefaults.DangerousPlaceholderPatterns);
+        }
+
         // -----------------------------------------------------------------------
         // AnonymizationOutputMarkers
         // -----------------------------------------------------------------------

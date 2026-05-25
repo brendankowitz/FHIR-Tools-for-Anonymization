@@ -369,5 +369,53 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.AnonymizerConfiguratio
             // Should not throw - fixed offset is provided, key is not needed
             config.Validate();
         }
+
+        // -----------------------------------------------------------------------
+        // TODO / FIXME placeholder detection
+        // -----------------------------------------------------------------------
+
+        [Theory]
+        [InlineData("TODO")]
+        [InlineData("todo")]
+        [InlineData("Todo")]
+        [InlineData("FIXME")]
+        [InlineData("fixme")]
+        [InlineData("Fixme")]
+        [InlineData("todolist_key_that_is_long_enough_for_length_check")]
+        public void Validate_WhenCryptoHashKeyContainsTodoOrFixme_ThrowsSecurityException(string key)
+        {
+            var config = new ParameterConfiguration { CryptoHashKey = key };
+            Assert.Throws<SecurityException>(() => config.Validate());
+        }
+
+        [Theory]
+        [InlineData("TODO")]
+        [InlineData("todo")]
+        [InlineData("Todo")]
+        [InlineData("FIXME")]
+        [InlineData("fixme")]
+        [InlineData("Fixme")]
+        public void Validate_WhenEncryptKeyContainsTodoOrFixme_ThrowsSecurityException(string key)
+        {
+            var config = new ParameterConfiguration { EncryptKey = key };
+            Assert.Throws<SecurityException>(() => config.Validate());
+        }
+
+        [Theory]
+        [InlineData("TODO")]
+        [InlineData("todo")]
+        [InlineData("Todo")]
+        [InlineData("FIXME")]
+        [InlineData("fixme")]
+        [InlineData("Fixme")]
+        public void Validate_WhenDateShiftKeyContainsTodoOrFixme_ThrowsSecurityException(string key)
+        {
+            var config = new ParameterConfiguration
+            {
+                DateShiftKey = key,
+                DateShiftFixedOffsetInDays = 0  // avoid requiring DateShiftKey for scope validation
+            };
+            Assert.Throws<SecurityException>(() => config.Validate());
+        }
     }
 }
