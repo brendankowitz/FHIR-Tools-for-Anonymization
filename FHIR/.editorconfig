@@ -1,0 +1,42 @@
+# EditorConfig helps developers define and maintain consistent
+# coding styles between different editors and IDEs
+# editorconfig.org
+
+root = true
+
+[*]
+indent_style = space
+indent_size = 4
+end_of_line = crlf
+charset = utf-8
+trim_trailing_whitespace = true
+insert_final_newline = true
+
+[*.{csproj,props,targets,yml,yaml,json,xml,config}]
+indent_size = 2
+
+# ---------------------------------------------------------------------------
+# Static analysis suppression for SonarAnalyzer (Roslyn) rules S1134 & S1135
+#
+# S1134 – "FIXME" tag detected
+# S1135 – "TODO" tag detected
+#
+# The files below use the literal strings "TODO" and "FIXME" as intentional
+# sentinel / default configuration values (ParameterDefaults.cs) or as
+# representative test-data strings in [InlineData] attributes that exercise
+# validation logic for those placeholder values.  These are NOT unresolved
+# work items and must not be flagged by static analysis.
+# ---------------------------------------------------------------------------
+
+# ParameterDefaults.cs – string constants whose values are intentional
+# sentinel strings (e.g., a default key placeholder), not pending work items.
+[src/Microsoft.Health.Fhir.Anonymizer.Shared.Core/AnonymizerConfigurations/ParameterDefaults.cs]
+dotnet_diagnostic.S1134.severity = none
+dotnet_diagnostic.S1135.severity = none
+
+# AnonymizerConfigurations unit-test files – [InlineData("TODO")] /
+# [InlineData("FIXME")] supply these strings as representative invalid-input
+# test cases; the strings are test data, not open code-review comments.
+[src/Microsoft.Health.Fhir.Anonymizer.Shared.Core.UnitTests/AnonymizerConfigurations/*.cs]
+dotnet_diagnostic.S1134.severity = none
+dotnet_diagnostic.S1135.severity = none
