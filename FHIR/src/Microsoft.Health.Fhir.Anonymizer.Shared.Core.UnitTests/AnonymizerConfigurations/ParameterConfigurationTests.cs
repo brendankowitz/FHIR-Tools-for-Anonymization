@@ -140,6 +140,8 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.UnitTests.AnonymizerConfiguratio
         [InlineData(-1000)]
         [InlineData(366)]
         [InlineData(1000)]
+        [InlineData(int.MinValue)]
+        [InlineData(int.MaxValue)]
         public void Validate_WhenDateShiftFixedOffsetIsOutOfRange_ThrowsAnonymizerConfigurationException(int offset)
         {
             var config = new ParameterConfiguration
