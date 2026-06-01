@@ -8,45 +8,62 @@ using Microsoft.Health.Fhir.Anonymizer.Core.Exceptions;
 namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
 {
     /// <summary>
-    /// Validates a <see cref="ParameterConfiguration"/> instance for security issues,
-    /// placeholder values, and logical consistency.
-    ///
-    /// SECURITY: This class enforces fail-secure behaviour. Any ambiguous or dangerous
-    /// configuration (placeholder keys, weak entropy, out-of-range values) causes
-    /// a hard exception rather than a silent degradation of privacy guarantees.
+    /// Static validator for <see cref="ParameterConfiguration"/>.
+    /// Validates security constraints, placeholder key detection, offset range checks,
+    /// and scope-specific key requirements.
     /// </summary>
-    public sealed class ParameterConfigurationValidator
+    /// <remarks>
+    /// A null <see cref="ParameterConfiguration"/> is explicitly valid and returns silently.
+    /// Null means the outer configuration omitted the parameters block entirely, which is
+    /// permitted — validation at the parameter level is intentionally skipped in that case
+    /// (Fail-Secure principle: missing config is safer than invalid config).
+    /// </remarks>
+    public static class ParameterConfigurationValidator
     {
         private static readonly ILogger s_logger = AnonymizerLogging.CreateLogger<ParameterConfigurationValidator>();
 
         /// <summary>
-        /// Valid AES key sizes in bits. Used to validate EncryptKey without allocating an Aes instance.
-        /// AES supports 128-bit (16 bytes), 192-bit (24 bytes), and 256-bit (32 bytes) keys.
+        /// Security guidance emitted when a placeholder or weak key is detected.
+        /// Extracted as a constant to ensure consistent messaging across all key-type
+        /// checks (cryptoHashKey, encryptKey, dateShiftKey) and to prevent silent
+        /// divergence between the two call sites.
+        /// </summary>
+        private static readonly string s_keyGenerationGuidance =
+            "TO GENERATE A SECURE KEY:\n" +
+            "  Linux/macOS:   openssl rand -base64 32\n" +
+            "  Windows:       pwsh -Command \"[Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Minimum 0 -Maximum 256 }))\"\n" +
+            "  .NET:          var key = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));\n\n" +
+            "BEST PRACTICES:\n" +
+            "  - Never commit actual keys to version control\n" +
+            "  - Use environment variables: Environment.GetEnvironmentVariable(\"CRYPTO_KEY\")\n" +
+            "  - Use Azure Key Vault, AWS Secrets Manager, or similar for production\n" +
+            "  - Rotate keys periodically according to your security policy\n" +
+            "  - Use different keys for different environments (dev/staging/production)\n";
+
+        /// <summary>
+        /// Valid AES key sizes in bits. AES supports 128-bit (16 bytes), 192-bit (24 bytes),
+        /// and 256-bit (32 bytes) keys. Static to avoid re-allocating on every validation call.
         /// </summary>
         private static readonly HashSet<int> s_validAesKeySizeBits = new HashSet<int> { 128, 192, 256 };
 
         /// <summary>
-        /// Validate the supplied <paramref name="config"/> for security issues and placeholder values.
-        /// A null config is treated as valid (no global parameters configured — see Fail-Secure principle).
-        ///
-        /// SECURITY: Rejects dangerous placeholder values that should never be used in production.
-        /// This prevents accidental use of example/template configurations with insecure dummy keys.
-        /// Throws <see cref="SecurityException"/> for placeholder keys to ensure fail-secure behavior.
+        /// Validates the given <paramref name="config"/>.
+        /// A null value is valid and returns silently.
         /// </summary>
-        /// <param name="config">
-        /// The <see cref="ParameterConfiguration"/> to validate, or <c>null</c> to skip validation.
-        /// </param>
-        /// <exception cref="SecurityException">
-        /// Thrown when a placeholder or whitespace-only cryptographic key is detected.
-        /// </exception>
+        /// <param name="config">The configuration to validate, or null.</param>
         /// <exception cref="AnonymizerConfigurationException">
-        /// Thrown when a configuration value is logically invalid (e.g. out-of-range date shift offset,
-        /// wrong AES key size, missing dateShiftKey for File or Folder scope).
+        /// Thrown when the configuration contains invalid settings such as an out-of-range
+        /// date-shift offset or a missing DateShiftKey for the configured scope.
+        /// </exception>
+        /// <exception cref="SecurityException">
+        /// Thrown when a key value is a known placeholder, whitespace-only, or otherwise weak.
         /// </exception>
         public static void Validate(ParameterConfiguration config)
         {
             if (config == null)
             {
+                // null ParameterConfiguration is valid: it means no parameter-level configuration
+                // was provided and all parameter validation is intentionally skipped.
                 return;
             }
 
@@ -63,10 +80,7 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
                     $"SECURITY ERROR: The cryptoHashKey is too short ({config.CryptoHashKey.Trim().Length} characters). " +
                     $"A minimum of {ParameterDefaults.MinCryptoHashKeyLength} characters is required to ensure " +
                     "adequate entropy for HMAC-SHA256 operations.\n\n" +
-                    "TO GENERATE A SECURE KEY:\n" +
-                    "  Linux/macOS:   openssl rand -base64 32\n" +
-                    "  Windows:       pwsh -Command \"[Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Minimum 0 -Maximum 256 }))\"\n" +
-                    "  .NET:          var key = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));");
+                    s_keyGenerationGuidance);
             }
 
             // SECURITY: Validate EncryptKey is a valid AES key size (128/192/256 bits)
@@ -75,7 +89,12 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
             // Validate fixed date-shift offset range
             ValidateDateShiftFixedOffsetInDays(config);
 
-            // Validate DateShiftKey presence for File/Folder scopes that require cross-resource consistency
+            // SECURITY: Validate DateShiftKey presence relative to DateShiftScope.
+            // Resource scope also requires a key because the HMAC-based date shift uses
+            // (resourceId + dateShiftKey) as its input. Without a key, the shift is determined
+            // solely by the resource ID, which is often predictable or publicly known. An attacker
+            // who knows the resource ID can recompute the shift and reverse the date offset,
+            // enabling re-identification. A secret key prevents this.
             ValidateDateShiftKeyForScope(config);
 
             // Validate differential privacy settings
@@ -93,7 +112,6 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
 
         /// <summary>
         /// Validate that the encrypt key size is a valid AES key size (128, 192, or 256 bits).
-        /// Uses a static HashSet of valid sizes to avoid allocating an Aes instance on every call.
         /// Only validates when encryptKey is non-null and non-empty.
         /// </summary>
         private static void ValidateEncryptKeySize(string encryptKey)
@@ -112,9 +130,8 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
         }
 
         /// <summary>
-        /// Validate that DateShiftFixedOffsetInDays, when provided, falls within the allowed
-        /// range [<see cref="ParameterDefaults.MinDateShiftOffsetDays"/>, <see cref="ParameterDefaults.MaxDateShiftOffsetDays"/>].
-        /// A null value is always valid — it simply means the key-based shift will be used.
+        /// Validate that DateShiftFixedOffsetInDays, when provided, falls within the allowed range.
+        /// A null value is always valid.
         /// </summary>
         private static void ValidateDateShiftFixedOffsetInDays(ParameterConfiguration config)
         {
@@ -168,21 +185,12 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
                         $"SECURITY ERROR: Placeholder {keyType} key detected in '{parameterName}'.\n\n" +
                         $"The configuration contains a placeholder value ('{pattern}') that must be replaced " +
                         "with a cryptographically secure key before use.\n\n" +
-                        "TO GENERATE A SECURE KEY:\n" +
-                        "  Linux/macOS:   openssl rand -base64 32\n" +
-                        "  Windows:       pwsh -Command \"[Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Minimum 0 -Maximum 256 }))\"\n" +
-                        "  .NET:          var key = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));\n\n" +
+                        s_keyGenerationGuidance +
                         "SECURITY WARNING: Using placeholder keys in production:\n" +
                         "  - Compromises cryptographic operations\n" +
                         "  - May lead to predictable hash values\n" +
                         "  - Enables re-identification attacks\n" +
-                        "  - Violates privacy guarantees\n\n" +
-                        "BEST PRACTICES:\n" +
-                        "  - Never commit actual keys to version control\n" +
-                        "  - Use environment variables: Environment.GetEnvironmentVariable(\"CRYPTO_KEY\")\n" +
-                        "  - Use Azure Key Vault, AWS Secrets Manager, or similar for production\n" +
-                        "  - Rotate keys periodically according to your security policy\n" +
-                        "  - Use different keys for different environments (dev/staging/production)\n");
+                        "  - Violates privacy guarantees\n");
                 }
             }
 
@@ -210,34 +218,27 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
         }
 
         /// <summary>
-        /// Validate that a non-empty DateShiftKey is present for <c>File</c> and <c>Folder</c>
-        /// <see cref="DateShiftScope"/> values when <see cref="ParameterConfiguration.DateShiftFixedOffsetInDays"/>
-        /// is not set.
+        /// Validates that a non-empty DateShiftKey is present for ALL DateShiftScope values
+        /// when DateShiftFixedOffsetInDays is not set.
         ///
-        /// File and Folder scopes require a key to ensure all resources in the same file or folder
-        /// receive the same deterministic date-shift offset. Without a key there is no mechanism to
-        /// produce a consistent, reproducible offset across resources, which would break temporal
-        /// relationships within the anonymized dataset.
+        /// SECURITY: Resource scope also requires a key because the HMAC-based date shift uses
+        /// (resourceId + dateShiftKey) as its input. Without a key, the shift is determined solely
+        /// by the resource ID, which is often predictable or publicly known. An attacker who knows
+        /// the resource ID can recompute the shift and reverse the date offset, enabling
+        /// re-identification. A secret key prevents this.
         ///
-        /// Resource scope (the default) does NOT require a key: each resource derives its own offset
-        /// independently, so no cross-resource consistency is needed. Requiring a key for Resource
-        /// scope would break all existing configurations that do not use date-shifting at all, since
-        /// <see cref="DateShiftScope"/> defaults to <c>Resource</c>.
+        /// File and Folder scopes additionally require a key for consistency: all resources
+        /// in the same file or folder must receive the same deterministic shift.
         /// </summary>
         private static void ValidateDateShiftKeyForScope(ParameterConfiguration config)
         {
-            // Only File and Folder scopes require a key for cross-resource consistency.
-            // Resource scope (the default, value 0) does not require a key.
-            if (config.DateShiftScope == DateShiftScope.Resource)
-            {
-                return;
-            }
+            var scope = config.DateShiftScope;
 
             if (string.IsNullOrEmpty(config.DateShiftKey) &&
                 !config.DateShiftFixedOffsetInDays.HasValue)
             {
                 throw new AnonymizerConfigurationException(
-                    $"A dateShiftKey is required when dateShiftScope is '{config.DateShiftScope}' and dateShiftFixedOffsetInDays is not set. " +
+                    $"A dateShiftKey is required when dateShiftScope is '{scope}' and dateShiftFixedOffsetInDays is not set. " +
                     "Provide a non-empty dateShiftKey, or set dateShiftFixedOffsetInDays to use a fixed date-shift offset instead.");
             }
         }
@@ -245,20 +246,16 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
         /// <summary>
         /// Validate differential privacy configuration parameters.
         /// </summary>
-        /// <exception cref="AnonymizerConfigurationException">
-        /// Thrown when any differential privacy parameter is outside its valid range.
-        /// </exception>
         private static void ValidateDifferentialPrivacySettings(DifferentialPrivacyParameterConfiguration settings)
         {
             if (settings.Epsilon <= 0)
             {
-                throw new AnonymizerConfigurationException(
-                    "Differential privacy epsilon must be greater than 0.");
+                throw new ArgumentException("Differential privacy epsilon must be greater than 0");
             }
 
             if (settings.Epsilon > 10.0)
             {
-                throw new AnonymizerConfigurationException(
+                throw new ArgumentException(
                     $"Differential privacy epsilon value {settings.Epsilon} exceeds maximum of 10.0. " +
                     "High epsilon values provide minimal privacy protection. See configuration comments for guidance.");
             }
@@ -273,34 +270,28 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
 
             if (settings.Delta < 0 || settings.Delta > 1)
             {
-                throw new AnonymizerConfigurationException(
-                    "Differential privacy delta must be between 0 and 1.");
+                throw new ArgumentException("Differential privacy delta must be between 0 and 1");
             }
 
             if (settings.Sensitivity <= 0)
             {
-                throw new AnonymizerConfigurationException(
-                    "Differential privacy sensitivity must be greater than 0.");
+                throw new ArgumentException("Differential privacy sensitivity must be greater than 0");
             }
 
             if (settings.MaxCumulativeEpsilon <= 0)
             {
-                throw new AnonymizerConfigurationException(
-                    "Differential privacy maxCumulativeEpsilon must be greater than 0.");
+                throw new ArgumentException("Differential privacy maxCumulativeEpsilon must be greater than 0");
             }
         }
 
         /// <summary>
         /// Validate k-anonymity configuration parameters.
         /// </summary>
-        /// <exception cref="AnonymizerConfigurationException">
-        /// Thrown when any k-anonymity parameter is outside its valid range.
-        /// </exception>
         private static void ValidateKAnonymitySettings(KAnonymityParameterConfiguration settings)
         {
             if (settings.KValue < 2)
             {
-                throw new AnonymizerConfigurationException(
+                throw new ArgumentException(
                     $"K-anonymity k-value must be at least 2 (provided: {settings.KValue}). " +
                     "k=1 provides no privacy protection.");
             }
@@ -314,8 +305,8 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
 
             if (settings.SuppressionThreshold < 0 || settings.SuppressionThreshold > 1)
             {
-                throw new AnonymizerConfigurationException(
-                    "K-anonymity suppression threshold must be between 0 and 1 (represents percentage).");
+                throw new ArgumentException(
+                    "K-anonymity suppression threshold must be between 0 and 1 (represents percentage)");
             }
         }
     }

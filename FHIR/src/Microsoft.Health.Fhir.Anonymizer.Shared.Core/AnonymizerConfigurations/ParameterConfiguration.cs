@@ -1,5 +1,8 @@
+using System;
 using System.Collections.Generic;
 using System.Runtime.Serialization;
+using Microsoft.Extensions.Logging;
+using Microsoft.Health.Fhir.Anonymizer.Core.Exceptions;
 using Newtonsoft.Json.Linq;
 
 namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
@@ -10,13 +13,12 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
     /// redaction (with optional partial-data retention for ages, dates, and ZIP codes),
     /// k-anonymity post-processing, differential privacy noise injection, and arbitrary
     /// extension settings for custom processors.
-    ///
-    /// This class is a pure data model (POCO). All validation logic lives in
-    /// <see cref="ParameterConfigurationValidator"/>.
     /// </summary>
     [DataContract]
     public class ParameterConfiguration
     {
+        private static readonly ILogger s_logger = AnonymizerLogging.CreateLogger<ParameterConfiguration>();
+
         /// <summary>
         /// Minimum allowed value for <see cref="DateShiftFixedOffsetInDays"/> (inclusive).
         /// </summary>
@@ -24,7 +26,7 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
         /// Retained for backward compatibility. New code should use
         /// <see cref="ParameterDefaults.MinDateShiftOffsetDays"/>.
         /// </remarks>
-        [System.Obsolete("Use ParameterDefaults.MinDateShiftOffsetDays")]
+        [Obsolete("Use ParameterDefaults.MinDateShiftOffsetDays")]
         public const int MinDateShiftOffsetDays = ParameterDefaults.MinDateShiftOffsetDays;
 
         /// <summary>
@@ -34,7 +36,7 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
         /// Retained for backward compatibility. New code should use
         /// <see cref="ParameterDefaults.MaxDateShiftOffsetDays"/>.
         /// </remarks>
-        [System.Obsolete("Use ParameterDefaults.MaxDateShiftOffsetDays")]
+        [Obsolete("Use ParameterDefaults.MaxDateShiftOffsetDays")]
         public const int MaxDateShiftOffsetDays = ParameterDefaults.MaxDateShiftOffsetDays;
 
         /// <summary>
@@ -45,7 +47,7 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
         /// Retained for backward compatibility. New code should use
         /// <see cref="ParameterDefaults.MinCryptoHashKeyLength"/>.
         /// </remarks>
-        [System.Obsolete("Use ParameterDefaults.MinCryptoHashKeyLength")]
+        [Obsolete("Use ParameterDefaults.MinCryptoHashKeyLength")]
         public const int MinCryptoHashKeyLength = ParameterDefaults.MinCryptoHashKeyLength;
 
         /// <summary>
@@ -93,7 +95,7 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
         /// AES symmetric encryption key used by the encrypt anonymization method.
         /// The key must encode to exactly 16, 24, or 32 UTF-8 bytes, corresponding to
         /// AES-128, AES-192, and AES-256 respectively. Keys of any other length are
-        /// rejected during validation. Generate a 256-bit key with:
+        /// rejected during <see cref="Validate"/>. Generate a 256-bit key with:
         ///   openssl rand -base64 32
         /// </summary>
         [DataMember(Name = "encryptKey")]
@@ -164,6 +166,20 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
         /// same <see cref="DateShiftKey"/> is reused across multiple datasets.
         /// </summary>
         public string DateShiftKeyPrefix { get; set; }
+
+        /// <summary>
+        /// Validate configuration for security issues and placeholder values.
+        /// Delegates to <see cref="ParameterConfigurationValidator.Validate"/> which contains
+        /// the full validation logic.
+        ///
+        /// SECURITY: Rejects dangerous placeholder values that should never be used in production.
+        /// This prevents accidental use of example/template configurations with insecure dummy keys.
+        /// Throws SecurityException for placeholder keys to ensure fail-secure behavior.
+        /// </summary>
+        public void Validate()
+        {
+            ParameterConfigurationValidator.Validate(this);
+        }
     }
 
     /// <summary>
@@ -230,27 +246,57 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
         public double Delta { get; set; } = 1e-5;
 
         /// <summary>
-        /// Sensitivity of the query function - maximum change in output for any single
-        /// individual's data. Must be calibrated to the specific query being performed.
-        /// DEFAULT: 1.0 (appropriate for count queries; adjust for sum/average queries)
+        /// Sensitivity of the query - maximum change in output for one record's addition/removal.
+        /// Must be set based on the specific query being protected.
+        /// DEFAULT: 1.0 (appropriate for counting queries)
         /// </summary>
         [DataMember(Name = "sensitivity")]
         public double Sensitivity { get; set; } = 1.0;
 
         /// <summary>
-        /// Maximum cumulative privacy budget across all queries on the same dataset.
-        /// Tracks total epsilon consumption to prevent privacy budget exhaustion.
-        /// DEFAULT: 10.0 (adjust based on the number of intended queries)
+        /// Maximum cumulative privacy budget across all queries.
+        /// Prevents epsilon budget exhaustion through repeated queries.
+        /// DEFAULT: 1.0
         /// </summary>
         [DataMember(Name = "maxCumulativeEpsilon")]
-        public double MaxCumulativeEpsilon { get; set; } = 10.0;
+        public double MaxCumulativeEpsilon { get; set; } = 1.0;
 
         /// <summary>
-        /// Noise mechanism to use for differential privacy.
-        /// DEFAULT: "Laplace" (standard mechanism for numeric queries)
-        /// ALTERNATIVES: "Gaussian" (better for machine learning applications)
+        /// When true, uses advanced composition theorems (e.g., the moments accountant)
+        /// to allow tighter privacy budget accounting across multiple queries, yielding
+        /// a lower effective epsilon for the same number of queries than basic composition.
+        /// DEFAULT: false (basic composition provides conservative, simpler guarantees)
         /// </summary>
-        [DataMember(Name = "noiseMechanism")]
+        [DataMember(Name = "useAdvancedComposition")]
+        public bool UseAdvancedComposition { get; set; } = false;
+
+        /// <summary>
+        /// The differential privacy noise mechanism to use.
+        /// Supported values: "Laplace" (default, for epsilon-DP), "Gaussian" (for (epsilon,delta)-DP).
+        /// The Laplace mechanism adds noise proportional to sensitivity/epsilon.
+        /// The Gaussian mechanism adds Gaussian noise calibrated to (epsilon, delta)-DP.
+        /// JSON deserialization uses "mechanism" for backward compatibility with existing
+        /// configuration files; the C# property name NoiseMechanism is used in code.
+        /// </summary>
+        [DataMember(Name = "mechanism")]
         public string NoiseMechanism { get; set; } = "Laplace";
+
+        /// <summary>
+        /// When true, tracks cumulative epsilon budget consumption across all queries in a session.
+        /// Once the cumulative budget exceeds <see cref="MaxCumulativeEpsilon"/>, further queries
+        /// are rejected to prevent budget exhaustion attacks.
+        /// DEFAULT: false
+        /// </summary>
+        [DataMember(Name = "privacyBudgetTrackingEnabled")]
+        public bool PrivacyBudgetTrackingEnabled { get; set; } = false;
+
+        /// <summary>
+        /// When true, enables sensitivity clipping to bound each individual record's contribution
+        /// to the query result before noise is added. Clipping ensures no single record can
+        /// inflate the sensitivity beyond the configured value, strengthening privacy guarantees.
+        /// DEFAULT: false
+        /// </summary>
+        [DataMember(Name = "clippingEnabled")]
+        public bool ClippingEnabled { get; set; } = false;
     }
 }
