@@ -169,13 +169,14 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
 
         /// <summary>
         /// Validate configuration for security issues and placeholder values.
-        /// Delegates to <see cref="ParameterConfigurationValidator.Validate"/> which contains
-        /// the full validation logic.
+        /// Delegates to <see cref="ParameterConfigurationValidator.Validate(ParameterConfiguration)"/> which
+        /// contains the full validation logic.
         ///
         /// SECURITY: Rejects dangerous placeholder values that should never be used in production.
         /// This prevents accidental use of example/template configurations with insecure dummy keys.
         /// Throws SecurityException for placeholder keys to ensure fail-secure behavior.
         /// </summary>
+        [Obsolete("Call ParameterConfigurationValidator.Validate(config) directly.", error: false)]
         public void Validate()
         {
             ParameterConfigurationValidator.Validate(this);
@@ -280,6 +281,14 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
         /// </summary>
         [DataMember(Name = "mechanism")]
         public string NoiseMechanism { get; set; } = "Laplace";
+
+        /// <summary>
+        /// Backward-compatibility shim for the renamed <see cref="NoiseMechanism"/> property.
+        /// Existing callers that reference <c>Mechanism</c> will continue to compile and run
+        /// correctly during the deprecation window. New code should use <see cref="NoiseMechanism"/>.
+        /// </summary>
+        [Obsolete("Use NoiseMechanism instead. This property will be removed in a future version.", error: false)]
+        public string Mechanism { get => NoiseMechanism; set => NoiseMechanism = value; }
 
         /// <summary>
         /// When true, tracks cumulative epsilon budget consumption across all queries in a session.

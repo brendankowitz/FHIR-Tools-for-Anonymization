@@ -86,10 +86,6 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
                 }
             }
 
-            // null ParameterConfiguration is valid by design: it means no global parameters are
-            // configured and all parameter-level validation (AES key size, placeholder detection,
-            // date-shift offset range) is intentionally skipped. This is NOT an oversight.
-            // See: Fail-Secure principle — missing configuration is safer than invalid configuration.
             ParameterConfigurationValidator.Validate(config.ParameterConfiguration);
         }
     }

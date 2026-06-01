@@ -49,6 +49,7 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
         /// <summary>
         /// Validates the given <paramref name="config"/>.
         /// A null value is valid and returns silently.
+        /// Uses the static internal logger.
         /// </summary>
         /// <param name="config">The configuration to validate, or null.</param>
         /// <exception cref="AnonymizerConfigurationException">
@@ -60,6 +61,26 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
         /// </exception>
         public static void Validate(ParameterConfiguration config)
         {
+            Validate(config, s_logger);
+        }
+
+        /// <summary>
+        /// Validates the given <paramref name="config"/> using the supplied <paramref name="logger"/>.
+        /// A null config is valid and returns silently.
+        /// This overload is provided to allow unit tests to inject a mock or capturing logger
+        /// and verify warning output without relying on the static logger.
+        /// </summary>
+        /// <param name="config">The configuration to validate, or null.</param>
+        /// <param name="logger">Logger to use for warnings. Must not be null.</param>
+        /// <exception cref="AnonymizerConfigurationException">
+        /// Thrown when the configuration contains invalid settings such as an out-of-range
+        /// date-shift offset or a missing DateShiftKey for the configured scope.
+        /// </exception>
+        /// <exception cref="SecurityException">
+        /// Thrown when a key value is a known placeholder, whitespace-only, or otherwise weak.
+        /// </exception>
+        public static void Validate(ParameterConfiguration config, ILogger logger)
+        {
             if (config == null)
             {
                 // null ParameterConfiguration is valid: it means no parameter-level configuration
@@ -68,9 +89,9 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
             }
 
             // SECURITY: Check for placeholder cryptographic keys
-            ValidateKeyParameter(config.CryptoHashKey, "cryptoHashKey", "cryptographic hash");
-            ValidateKeyParameter(config.EncryptKey, "encryptKey", "encryption");
-            ValidateKeyParameter(config.DateShiftKey, "dateShiftKey", "date shift");
+            ValidateKeyParameter(config.CryptoHashKey, "cryptoHashKey", "cryptographic hash", logger);
+            ValidateKeyParameter(config.EncryptKey, "encryptKey", "encryption", logger);
+            ValidateKeyParameter(config.DateShiftKey, "dateShiftKey", "date shift", logger);
 
             // SECURITY: Enforce minimum length for CryptoHashKey
             if (!string.IsNullOrWhiteSpace(config.CryptoHashKey) &&
@@ -89,7 +110,7 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
             // Validate fixed date-shift offset range
             ValidateDateShiftFixedOffsetInDays(config);
 
-            // SECURITY: Validate DateShiftKey presence relative to DateShiftScope.
+            // SECURITY: Validate DateShiftKey presence and minimum length relative to DateShiftScope.
             // Resource scope also requires a key because the HMAC-based date shift uses
             // (resourceId + dateShiftKey) as its input. Without a key, the shift is determined
             // solely by the resource ID, which is often predictable or publicly known. An attacker
@@ -100,13 +121,13 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
             // Validate differential privacy settings
             if (config.DifferentialPrivacySettings != null)
             {
-                ValidateDifferentialPrivacySettings(config.DifferentialPrivacySettings);
+                ValidateDifferentialPrivacySettings(config.DifferentialPrivacySettings, logger);
             }
 
             // Validate k-anonymity settings
             if (config.KAnonymitySettings != null)
             {
-                ValidateKAnonymitySettings(config.KAnonymitySettings);
+                ValidateKAnonymitySettings(config.KAnonymitySettings, logger);
             }
         }
 
@@ -155,8 +176,11 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
         /// <summary>
         /// Validate a key parameter does not contain placeholder values or consist solely of whitespace.
         /// SECURITY CRITICAL: Prevents use of example/template keys and whitespace-only values in production.
+        /// Patterns in <see cref="ParameterDefaults.DangerousPlaceholderPatterns"/> are pre-normalised
+        /// to upper case; <paramref name="keyValue"/> is also uppercased once before the loop so that
+        /// each iteration avoids a redundant <c>ToUpperInvariant()</c> allocation per pattern.
         /// </summary>
-        private static void ValidateKeyParameter(string keyValue, string parameterName, string keyType)
+        private static void ValidateKeyParameter(string keyValue, string parameterName, string keyType, ILogger logger)
         {
             if (string.IsNullOrEmpty(keyValue))
             {
@@ -172,14 +196,15 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
                     "Generate a cryptographically secure random key using: openssl rand -base64 32");
             }
 
-            // Trim and convert to uppercase for case-insensitive comparison
+            // Trim and convert to uppercase once for all comparisons below.
+            // DangerousPlaceholderPatterns entries are pre-normalised to upper case, so
+            // StringComparison.Ordinal is sufficient (no per-pattern ToUpperInvariant allocation).
             var normalizedKey = keyValue.Trim().ToUpperInvariant();
 
-            // Check against all dangerous placeholder patterns.
-            // Normalize both sides to upper-case for case-insensitive comparison.
             foreach (var pattern in ParameterDefaults.DangerousPlaceholderPatterns)
             {
-                if (normalizedKey.Contains(pattern.ToUpperInvariant(), StringComparison.Ordinal))
+                // Both sides are already uppercase; use Ordinal to avoid culture-specific overhead.
+                if (normalizedKey.Contains(pattern, StringComparison.Ordinal))
                 {
                     throw new SecurityException(
                         $"SECURITY ERROR: Placeholder {keyType} key detected in '{parameterName}'.\n\n" +
@@ -197,7 +222,7 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
             // Additional check: warn on very short keys
             if (keyValue.Length < 16)
             {
-                s_logger.LogWarning(
+                logger.LogWarning(
                     $"The {keyType} key in '{parameterName}' is very short ({keyValue.Length} characters). " +
                     "Recommended minimum is 32 bytes (44 characters in Base64). " +
                     "Short keys provide inadequate security and may be vulnerable to brute force attacks.");
@@ -219,7 +244,8 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
 
         /// <summary>
         /// Validates that a non-empty DateShiftKey is present for ALL DateShiftScope values
-        /// when DateShiftFixedOffsetInDays is not set.
+        /// when DateShiftFixedOffsetInDays is not set, and that the key meets the minimum
+        /// length requirement (<see cref="ParameterDefaults.MinDateShiftKeyLength"/>).
         ///
         /// SECURITY: Resource scope also requires a key because the HMAC-based date shift uses
         /// (resourceId + dateShiftKey) as its input. Without a key, the shift is determined solely
@@ -241,12 +267,25 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
                     $"A dateShiftKey is required when dateShiftScope is '{scope}' and dateShiftFixedOffsetInDays is not set. " +
                     "Provide a non-empty dateShiftKey, or set dateShiftFixedOffsetInDays to use a fixed date-shift offset instead.");
             }
+
+            // SECURITY: Enforce minimum key length even when a key is supplied.
+            // A key shorter than MinDateShiftKeyLength does not provide adequate entropy
+            // for HMAC-based date shifting and must be rejected.
+            if (!string.IsNullOrEmpty(config.DateShiftKey) &&
+                config.DateShiftKey.Trim().Length < ParameterDefaults.MinDateShiftKeyLength)
+            {
+                throw new SecurityException(
+                    $"SECURITY ERROR: The dateShiftKey is too short ({config.DateShiftKey.Trim().Length} characters). " +
+                    $"A minimum of {ParameterDefaults.MinDateShiftKeyLength} characters is required to ensure " +
+                    "adequate entropy for HMAC-based date shifting.\n\n" +
+                    s_keyGenerationGuidance);
+            }
         }
 
         /// <summary>
         /// Validate differential privacy configuration parameters.
         /// </summary>
-        private static void ValidateDifferentialPrivacySettings(DifferentialPrivacyParameterConfiguration settings)
+        private static void ValidateDifferentialPrivacySettings(DifferentialPrivacyParameterConfiguration settings, ILogger logger)
         {
             if (settings.Epsilon <= 0)
             {
@@ -262,7 +301,7 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
 
             if (settings.Epsilon > 1.0)
             {
-                s_logger.LogWarning(
+                logger.LogWarning(
                     $"Differential privacy epsilon value {settings.Epsilon} is high (>1.0). " +
                     "This provides weaker privacy guarantees. Consider using epsilon <= 1.0 for moderate privacy " +
                     "or epsilon <= 0.1 for strong privacy (NIST SP 800-188 guidance for health data).");
@@ -287,7 +326,7 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
         /// <summary>
         /// Validate k-anonymity configuration parameters.
         /// </summary>
-        private static void ValidateKAnonymitySettings(KAnonymityParameterConfiguration settings)
+        private static void ValidateKAnonymitySettings(KAnonymityParameterConfiguration settings, ILogger logger)
         {
             if (settings.KValue < 2)
             {
@@ -298,7 +337,7 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
 
             if (settings.KValue == 2)
             {
-                s_logger.LogWarning(
+                logger.LogWarning(
                     "K-anonymity k-value is 2 (minimal). Consider k >= 5 for better privacy protection " +
                     "(recommended by HIPAA Safe Harbor guidance).");
             }

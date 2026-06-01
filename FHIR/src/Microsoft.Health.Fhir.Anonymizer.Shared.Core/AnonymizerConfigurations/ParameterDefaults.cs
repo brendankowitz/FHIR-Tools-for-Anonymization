@@ -39,7 +39,11 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
         /// Made public so external code can surface the same rejection logic without
         /// duplicating the pattern list.
         /// Using ImmutableArray prevents runtime mutation via casting to a mutable interface.
-        /// Validated case-insensitively by ValidateKeyParameter via ToUpperInvariant().
+        ///
+        /// All entries are pre-normalised to UPPER CASE so that
+        /// <see cref="ParameterConfigurationValidator"/> can compare against an already-uppercased
+        /// key value using <see cref="StringComparison.Ordinal"/> without allocating a new
+        /// string per iteration via <c>pattern.ToUpperInvariant()</c>.
         ///
         /// Note on static analysis (issue #142): the string literals "TODO" and "FIXME"
         /// below are intentional security-enforcement patterns – the validator rejects any
@@ -49,8 +53,10 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
         /// for this file via FHIR/.editorconfig.
         /// </summary>
         public static readonly ImmutableArray<string> DangerousPlaceholderPatterns = ImmutableArray.Create(
+            // "HMAC_KEY" subsumes "$HMAC_KEY": any key containing "$HMAC_KEY" also contains
+            // "HMAC_KEY" as a substring, so listing both is redundant. Only the shorter
+            // (broader-matching) pattern is kept.
             "HMAC_KEY",
-            "$HMAC_KEY",
             "YOUR_KEY",
             "YOUR_KEY_HERE",
             "YOUR_SECURE_KEY",
@@ -119,12 +125,10 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
                     $"but was {MinCryptoHashKeyLength}.");
             }
 
-            if (MinDateShiftKeyLength <= 0)
-            {
-                throw new InvalidOperationException(
-                    $"ParameterDefaults invariant violation: MinDateShiftKeyLength must be positive, " +
-                    $"but was {MinDateShiftKeyLength}.");
-            }
+            // MinDateShiftKeyLength is a const, so the compiler can prove this branch is
+            // unreachable. The check is intentionally omitted to avoid dead-code warnings.
+            // If MinDateShiftKeyLength is ever refactored to a non-const, restore the guard:
+            //   if (MinDateShiftKeyLength <= 0) throw new InvalidOperationException(...);
 
             if (MinDateShiftOffsetDays > MaxDateShiftOffsetDays)
             {
