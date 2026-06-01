@@ -1,80 +1,76 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
-using Hl7.FhirPath;
 using Microsoft.Extensions.Logging;
 using Microsoft.Health.Fhir.Anonymizer.Core.Exceptions;
-using Microsoft.Health.Fhir.Anonymizer.Core.Processors.Settings;
 
 namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
 {
     public class AnonymizerConfigurationValidator
     {
-        private readonly ILogger _logger = AnonymizerLogging.CreateLogger<AnonymizerConfigurationValidator>();
-        
+        private static readonly ILogger s_logger = AnonymizerLogging.CreateLogger<AnonymizerConfigurationValidator>();
+
         public void Validate(AnonymizerConfiguration config)
         {
-            
-            if (string.IsNullOrEmpty(config.FhirVersion)) 
+            if (config == null)
             {
-                _logger.LogWarning($"Version is not specified in configuration file.");                            
-            }
-            else if (!string.Equals(Constants.SupportedVersion, config.FhirVersion, StringComparison.InvariantCultureIgnoreCase))
-            {
-                throw new AnonymizerConfigurationException($"Configuration of fhirVersion {config.FhirVersion} is not supported. Expected fhirVersion: {Constants.SupportedVersion}");
+                throw new AnonymizerConfigurationException("Configuration is null.");
             }
 
-            if (config.FhirPathRules == null)
+            if (config.FhirVersion != null)
             {
-                throw new AnonymizerConfigurationException("The configuration is invalid, please specify any fhirPathRules");
+                ValidateFhirVersion(config.FhirVersion);
             }
 
-            FhirPathCompiler compiler = new FhirPathCompiler();
-            var supportedMethods = Enum.GetNames(typeof(AnonymizerMethod)).ToHashSet(StringComparer.InvariantCultureIgnoreCase);
-            foreach (var rule in config.FhirPathRules)
+            ParameterConfigurationValidator.Validate(config.ParameterConfiguration);
+
+            if (config.PathRules == null && config.TypeRules == null)
             {
-                if (!rule.ContainsKey(Constants.PathKey) || !rule.ContainsKey(Constants.MethodKey))
-                {
-                    throw new AnonymizerConfigurationException("Missing path or method in Fhir path rule config.");
-                }
-
-                // Grammar check on FHIR path
-                try
-                {
-                    compiler.Compile(rule[Constants.PathKey].ToString());
-                }
-                catch (Exception ex)
-                {
-                    throw new AnonymizerConfigurationException($"Invalid FHIR path {rule[Constants.PathKey]}", ex);
-                }
-
-                // Method validate
-                string method = rule[Constants.MethodKey].ToString();
-                if (!supportedMethods.Contains(method))
-                {
-                    _logger.LogWarning($"Anonymization method {method} is not a built-in method. Please make sure method {method} has been added as custom processor.");
-                }
-
-                // Should provide replacement value for substitute rule
-                if (string.Equals(method, AnonymizerMethod.Substitute.ToString(), StringComparison.InvariantCultureIgnoreCase))
-                {
-                    SubstituteSetting.ValidateRuleSettings(rule);
-                }
-
-                if (string.Equals(method, AnonymizerMethod.Perturb.ToString(), StringComparison.InvariantCultureIgnoreCase))
-                {
-                    PerturbSetting.ValidateRuleSettings(rule);
-                }
-                if (string.Equals(method, AnonymizerMethod.Generalize.ToString(), StringComparison.InvariantCultureIgnoreCase))
-                {
-                    GeneralizeSetting.ValidateRuleSettings(rule);
-                }
+                s_logger.LogWarning("No anonymization rules are defined (pathRules and typeRules are both null). " +
+                    "All data will pass through without anonymization.");
+                return;
             }
 
-            // null ParameterConfiguration is valid by design: it means no global parameters are
-            // configured and all parameter-level validation (AES key size, placeholder detection,
-            // date-shift offset range) is intentionally skipped. This is NOT an oversight.
-            // See: Fail-Secure principle — missing configuration is safer than invalid configuration.
-            config.ParameterConfiguration?.Validate();
+            var allRules = (config.PathRules ?? Enumerable.Empty<AnonymizerRule>())
+                .Concat(config.TypeRules ?? Enumerable.Empty<AnonymizerRule>())
+                .ToList();
+
+            ValidateRuleList(allRules);
+        }
+
+        private static void ValidateFhirVersion(string fhirVersion)
+        {
+            var supportedVersions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "stu3",
+                "r4",
+                "r4b",
+                "r5",
+            };
+
+            if (!supportedVersions.Contains(fhirVersion))
+            {
+                throw new AnonymizerConfigurationException(
+                    $"Unsupported FHIR version '{fhirVersion}'. Supported versions are: {string.Join(", ", supportedVersions)}.");
+            }
+        }
+
+        private static void ValidateRuleList(List<AnonymizerRule> rules)
+        {
+            foreach (var rule in rules)
+            {
+                if (string.IsNullOrWhiteSpace(rule.Path))
+                {
+                    throw new AnonymizerConfigurationException(
+                        "An anonymization rule has a null or empty path. All rules must specify a non-empty path.");
+                }
+
+                if (string.IsNullOrWhiteSpace(rule.Method))
+                {
+                    throw new AnonymizerConfigurationException(
+                        $"Rule for path '{rule.Path}' has a null or empty method. All rules must specify an anonymization method.");
+                }
+            }
         }
     }
 }
