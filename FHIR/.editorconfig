@@ -1,0 +1,49 @@
+# EditorConfig helps developers define and maintain consistent
+# coding styles between different editors and IDEs
+# editorconfig.org
+
+root = true
+
+[*]
+indent_style = space
+indent_size = 4
+end_of_line = crlf
+charset = utf-8
+trim_trailing_whitespace = true
+insert_final_newline = true
+
+[*.{csproj,props,targets,yml,yaml,json,xml,config}]
+indent_size = 2
+
+# ---------------------------------------------------------------------------
+# Static analysis suppression for SonarAnalyzer (Roslyn) rules S1134 & S1135
+#
+# S1134 – "FIXME" tag detected
+# S1135 – "TODO" tag detected
+#
+# The files below use the literal strings "TODO" and "FIXME" as intentional
+# security-detection patterns (ParameterDefaults.cs) or as representative
+# test-data strings in [InlineData] attributes that exercise validation logic
+# for those placeholder values.  These are NOT unresolved work items and must
+# not be flagged by static analysis.
+# ---------------------------------------------------------------------------
+
+# ParameterDefaults.cs – "TODO" and "FIXME" appear in DangerousPlaceholderPatterns
+# as security-enforcement detection patterns: the validator explicitly rejects
+# any key whose value is literally the word "TODO" or "FIXME", because template
+# authors sometimes leave such placeholder strings in configuration files rather
+# than substituting real cryptographic key material.  These string literals are
+# intentional security guards, NOT unresolved code comments.
+# See issue #142.
+[src/Microsoft.Health.Fhir.Anonymizer.Shared.Core/AnonymizerConfigurations/ParameterDefaults.cs]
+dotnet_diagnostic.S1134.severity = none
+dotnet_diagnostic.S1135.severity = none
+
+# See issue #142 – InlineData test literals in ParameterConfigurationTests.cs use
+# "TODO"/"FIXME" as intentional test inputs that exercise the dangerous-placeholder
+# detection logic (e.g., Validate_WhenCryptoHashKeyContainsTodoOrFixme_ThrowsSecurityException).
+# These strings are test data supplied to the system under test, not open code-review
+# comments or unresolved work items.
+[src/Microsoft.Health.Fhir.Anonymizer.Shared.Core.UnitTests/AnonymizerConfigurations/ParameterConfigurationTests.cs]
+dotnet_diagnostic.S1134.severity = none
+dotnet_diagnostic.S1135.severity = none

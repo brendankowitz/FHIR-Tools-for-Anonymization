@@ -34,6 +34,13 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
         /// duplicating the pattern list.
         /// Using ImmutableArray prevents runtime mutation via casting to a mutable interface.
         /// Validated case-insensitively by ValidateKeyParameter via ToUpperInvariant().
+        ///
+        /// Note on static analysis (issue #142): the string literals "TODO" and "FIXME"
+        /// below are intentional security-enforcement patterns – the validator rejects any
+        /// key whose value is literally one of these words, because template authors
+        /// sometimes leave such placeholders in configuration files instead of real key
+        /// material.  They are NOT unresolved code comments; S1134/S1135 are suppressed
+        /// for this file via FHIR/.editorconfig.
         /// </summary>
         public static readonly ImmutableArray<string> DangerousPlaceholderPatterns = ImmutableArray.Create(
             "$HMAC_KEY",
@@ -51,9 +58,11 @@ namespace Microsoft.Health.Fhir.Anonymizer.Core.AnonymizerConfigurations
             "<YOUR_KEY>",
             "[YOUR_KEY]",
             "{{YOUR_KEY}}",
-            // The following two entries are deliberate: reject any key whose value is literally
-            // the word "TODO" or "FIXME", since template authors often leave such placeholder
-            // strings in configuration files rather than replacing them with real keys.
+            // The two entries below are deliberate security guards: reject any key whose
+            // value is literally the word "TODO" or "FIXME", since template authors often
+            // leave such placeholder strings in configuration files rather than replacing
+            // them with real keys.  These string literals are NOT unresolved work items.
+            // S1134/S1135 are suppressed for this file in FHIR/.editorconfig (issue #142).
             "TODO",
             "FIXME"
         );
